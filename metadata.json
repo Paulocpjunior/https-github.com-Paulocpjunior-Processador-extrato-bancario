@@ -1,0 +1,5 @@
+{
+  "name": "Processador de Extratos Bancários",
+  "description": "Um aplicativo para enviar PDFs de extratos bancários, extrair dados de transações usando IA, permitir validação e correção, e exportar os dados para o formato CSV para sistemas contábeis.",
+  "requestFramePermissions": []
+}
