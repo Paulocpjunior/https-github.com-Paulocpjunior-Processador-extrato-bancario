@@ -30,6 +30,9 @@ const initialFilters: Filters = {
   endDate: '',
   minAmount: '',
   maxAmount: '',
+  category: '',
+  showUnusual: 'all',
+  transactionType: 'all',
 };
 
 export default function App() {
@@ -186,6 +189,17 @@ export default function App() {
       if (filters.description && !t.description.toLowerCase().includes(filters.description.toLowerCase())) {
         return false;
       }
+      // Category filter
+      if (filters.category && t.category !== filters.category) {
+        return false;
+      }
+      // Unusual filter
+      if (filters.showUnusual === 'unusualOnly' && !t.isUnusual) {
+        return false;
+      }
+      if (filters.showUnusual === 'commonOnly' && t.isUnusual) {
+        return false;
+      }
       // Date filter
       if (filters.startDate && t.date < filters.startDate) {
         return false;
@@ -203,6 +217,15 @@ export default function App() {
       if (filters.maxAmount && amount > parseFloat(filters.maxAmount)) {
         return false;
       }
+
+      // Transaction Type filter
+      if (filters.transactionType === 'debit' && debit <= 0) {
+        return false;
+      }
+      if (filters.transactionType === 'credit' && credit <= 0) {
+        return false;
+      }
+
       return true;
     });
   }, [transactions, filters]);
@@ -445,7 +468,7 @@ export default function App() {
                             <h3 className="font-bold text-yellow-800 dark:text-yellow-200">Aviso de Divergência de Saldo</h3>
                             <p className="text-sm text-yellow-700 dark:text-yellow-300">
                                 O saldo final do extrato ({formatCurrency(statementBalance)}) não corresponde ao saldo calculado ({formatCurrency(calculatedFinalBalance)}).
-                                Por favor, revise as transações.
+                                Por favor, revise as transações, especialmente as destacadas em amarelo que foram sinalizadas pela IA como incomuns.
                             </p>
                             </div>
                         </div>

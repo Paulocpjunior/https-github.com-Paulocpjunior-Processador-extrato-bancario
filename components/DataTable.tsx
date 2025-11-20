@@ -1,4 +1,5 @@
-import React from 'react';
+
+import React, { useState, useRef, useMemo } from 'react';
 import { Transaction, DateValidationError, CNPJValidationError, CurrencyValidationError } from '../types';
 import { TRANSACTION_CATEGORIES } from '../constants';
 import { formatCNPJForDisplay } from '../utils/cnpjUtils';
@@ -53,23 +54,61 @@ export const DataTable: React.FC<DataTableProps> = ({ transactions, onDataChange
     return numValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
+  // Virtualization Logic
+  const ROW_HEIGHT = 60; 
+  const VISIBLE_HEIGHT = 600; 
+  const BUFFER = 5;
+
+  const [scrollTop, setScrollTop] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+      setScrollTop(e.currentTarget.scrollTop);
+  };
+
+  const { virtualItems, paddingTop, paddingBottom } = useMemo(() => {
+      const startIndex = Math.floor(scrollTop / ROW_HEIGHT);
+      const effectiveStartIndex = Math.max(0, startIndex - BUFFER);
+      
+      const endIndex = Math.min(
+        transactions.length, 
+        Math.ceil((scrollTop + VISIBLE_HEIGHT) / ROW_HEIGHT) + BUFFER
+      );
+
+      const virtualItems = transactions.slice(effectiveStartIndex, endIndex);
+      
+      const paddingTop = effectiveStartIndex * ROW_HEIGHT;
+      const paddingBottom = (transactions.length - endIndex) * ROW_HEIGHT;
+
+      return { virtualItems, paddingTop, paddingBottom };
+  }, [transactions, scrollTop]);
+
+
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full text-sm text-left text-slate-500 dark:text-slate-400">
-        <thead className="text-xs text-slate-700 uppercase bg-slate-50 dark:bg-slate-700 dark:text-slate-300">
+    <div 
+      className="overflow-auto relative border rounded-lg border-slate-200 dark:border-slate-700"
+      style={{ maxHeight: `${VISIBLE_HEIGHT}px` }}
+      ref={containerRef}
+      onScroll={handleScroll}
+    >
+      <table className="min-w-full text-sm text-left text-slate-500 dark:text-slate-400 border-collapse">
+        <thead className="text-xs text-slate-700 uppercase bg-slate-50 dark:bg-slate-700 dark:text-slate-300 sticky top-0 z-20 shadow-sm">
           <tr>
-            <th scope="col" className="px-4 py-3 w-[10%]">Data</th>
-            <th scope="col" className="px-4 py-3 w-[25%]">Descrição</th>
-            <th scope="col" className="px-4 py-3 w-[15%]">Nome da Empresa</th>
-            <th scope="col" className="px-4 py-3 w-[12%]">CNPJ</th>
-            <th scope="col" className="px-4 py-3 w-[12%]">Categoria</th>
-            <th scope="col" className="px-4 py-3 text-right w-[9%]">Débito</th>
-            <th scope="col" className="px-4 py-3 text-right w-[9%]">Crédito</th>
-            <th scope="col" className="px-4 py-3 text-right w-[8%]">Saldo</th>
+            <th scope="col" className="px-4 py-3 w-[10%] bg-slate-50 dark:bg-slate-700">Data</th>
+            <th scope="col" className="px-4 py-3 w-[25%] bg-slate-50 dark:bg-slate-700">Descrição</th>
+            <th scope="col" className="px-4 py-3 w-[15%] bg-slate-50 dark:bg-slate-700">Nome da Empresa</th>
+            <th scope="col" className="px-4 py-3 w-[12%] bg-slate-50 dark:bg-slate-700">CNPJ</th>
+            <th scope="col" className="px-4 py-3 w-[12%] bg-slate-50 dark:bg-slate-700">Categoria</th>
+            <th scope="col" className="px-4 py-3 text-right w-[9%] bg-slate-50 dark:bg-slate-700">Débito</th>
+            <th scope="col" className="px-4 py-3 text-right w-[9%] bg-slate-50 dark:bg-slate-700">Crédito</th>
+            <th scope="col" className="px-4 py-3 text-right w-[8%] bg-slate-50 dark:bg-slate-700">Saldo</th>
           </tr>
         </thead>
         <tbody>
-          {transactions.map((transaction) => {
+          {paddingTop > 0 && (
+            <tr><td colSpan={8} style={{ height: paddingTop }}></td></tr>
+          )}
+          {virtualItems.map((transaction) => {
             const dateError = dateErrors[transaction.id];
             const cnpjError = cnpjErrors[transaction.id];
             const debitError = currencyErrors[`${transaction.id}-debit`];
@@ -79,6 +118,7 @@ export const DataTable: React.FC<DataTableProps> = ({ transactions, onDataChange
             return (
               <tr 
                 key={transaction.id} 
+                style={{ height: ROW_HEIGHT }}
                 className={`border-b dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-900/20 
                   ${isUnusual ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-white dark:bg-slate-800'}`
                 }>
@@ -202,6 +242,9 @@ export const DataTable: React.FC<DataTableProps> = ({ transactions, onDataChange
               </tr>
             )
           })}
+          {paddingBottom > 0 && (
+            <tr><td colSpan={8} style={{ height: paddingBottom }}></td></tr>
+          )}
         </tbody>
       </table>
     </div>

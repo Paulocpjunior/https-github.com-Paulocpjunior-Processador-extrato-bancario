@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Filters } from '../types';
+import { TRANSACTION_CATEGORIES } from '../constants';
 
 interface FilterBarProps {
   filters: Filters;
@@ -85,7 +86,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange, o
 
   return (
     <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 items-end">
         <div>
           <label htmlFor="description" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Descrição</label>
           <input
@@ -97,6 +98,52 @@ export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange, o
             placeholder="Pesquisar..."
             className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
           />
+        </div>
+
+        <div>
+            <label htmlFor="category" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Categoria</label>
+            <select
+                name="category"
+                id="category"
+                value={filters.category}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            >
+                <option value="">Todas as categorias</option>
+                {TRANSACTION_CATEGORIES.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                ))}
+            </select>
+        </div>
+
+        <div>
+            <label htmlFor="transactionType" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Tipo</label>
+            <select
+                name="transactionType"
+                id="transactionType"
+                value={filters.transactionType}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            >
+                <option value="all">Todos</option>
+                <option value="debit">Apenas Débitos</option>
+                <option value="credit">Apenas Créditos</option>
+            </select>
+        </div>
+
+        <div>
+            <label htmlFor="showUnusual" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Status</label>
+            <select
+                name="showUnusual"
+                id="showUnusual"
+                value={filters.showUnusual}
+                onChange={handleChange}
+                className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            >
+                <option value="all">Todas</option>
+                <option value="unusualOnly">Apenas Incomuns</option>
+                <option value="commonOnly">Apenas Comuns</option>
+            </select>
         </div>
 
         <div className="flex flex-col gap-1">

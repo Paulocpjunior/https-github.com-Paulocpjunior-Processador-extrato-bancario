@@ -47,4 +47,7 @@ export interface Filters {
     endDate: string;
     minAmount: string;
     maxAmount: string;
+    category: string;
+    showUnusual: 'all' | 'unusualOnly' | 'commonOnly';
+    transactionType: 'all' | 'debit' | 'credit';
 }
