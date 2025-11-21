@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Transaction, DateValidationError, CNPJValidationError, CurrencyValidationError } from '../types';
 import { TRANSACTION_CATEGORIES } from '../constants';
 import { formatCNPJForDisplay } from '../utils/cnpjUtils';
@@ -66,6 +66,14 @@ export const DataTable: React.FC<DataTableProps> = ({ transactions, onDataChange
       setScrollTop(e.currentTarget.scrollTop);
   };
 
+  // Reset scroll when filtering or list size changes significantly
+  useEffect(() => {
+    if (containerRef.current) {
+        containerRef.current.scrollTop = 0;
+        setScrollTop(0);
+    }
+  }, [transactions.length]);
+
   const { virtualItems, paddingTop, paddingBottom } = useMemo(() => {
       const startIndex = Math.floor(scrollTop / ROW_HEIGHT);
       const effectiveStartIndex = Math.max(0, startIndex - BUFFER);
@@ -78,7 +86,7 @@ export const DataTable: React.FC<DataTableProps> = ({ transactions, onDataChange
       const virtualItems = transactions.slice(effectiveStartIndex, endIndex);
       
       const paddingTop = effectiveStartIndex * ROW_HEIGHT;
-      const paddingBottom = (transactions.length - endIndex) * ROW_HEIGHT;
+      const paddingBottom = Math.max(0, (transactions.length - endIndex) * ROW_HEIGHT);
 
       return { virtualItems, paddingTop, paddingBottom };
   }, [transactions, scrollTop]);
@@ -91,7 +99,7 @@ export const DataTable: React.FC<DataTableProps> = ({ transactions, onDataChange
       ref={containerRef}
       onScroll={handleScroll}
     >
-      <table className="min-w-full text-sm text-left text-slate-500 dark:text-slate-400 border-collapse">
+      <table className="min-w-full text-sm text-left text-slate-500 dark:text-slate-400 border-collapse table-fixed">
         <thead className="text-xs text-slate-700 uppercase bg-slate-50 dark:bg-slate-700 dark:text-slate-300 sticky top-0 z-20 shadow-sm">
           <tr>
             <th scope="col" className="px-4 py-3 w-[10%] bg-slate-50 dark:bg-slate-700">Data</th>
