@@ -117,7 +117,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({ filters, onFilterChange, o
         </div>
 
         <div>
-            <label htmlFor="transactionType" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Tipo</label>
+            <label htmlFor="transactionType" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Tipo de Transação</label>
             <select
                 name="transactionType"
                 id="transactionType"
