@@ -12,7 +12,7 @@ import { exportToCSV, exportToXLSX, exportToTXT, exportToPDF, countPdfPages } fr
 import { validateDate } from './utils/dateUtils';
 import { validateCNPJ, formatCNPJForDisplay } from './utils/cnpjUtils';
 import { parseCurrency, validateCurrency } from './utils/currencyUtils';
-import { ArrowDownTrayIcon, ArrowPathIcon, ExclamationTriangleIcon, PencilIcon, ChevronDownIcon } from './components/icons/Icons';
+import { ArrowDownTrayIcon, ArrowPathIcon, ExclamationTriangleIcon, PencilIcon, ChevronDownIcon, CheckCircleIcon, XCircleIcon } from './components/icons/Icons';
 
 const formatCurrency = (value: number | null | undefined) => {
     if (value === null || value === undefined) return 'N/A';
@@ -36,6 +36,8 @@ const initialFilters: Filters = {
   transactionType: 'all',
 };
 
+type ToastType = 'success' | 'warning' | 'error';
+
 export default function App() {
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
   const [isInfoConfirmed, setIsInfoConfirmed] = useState<boolean>(false);
@@ -53,6 +55,10 @@ export default function App() {
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const exportContainerRef = useRef<HTMLDivElement>(null);
   const [categorizingId, setCategorizingId] = useState<string | null>(null);
+  
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<ToastType>('success');
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -66,6 +72,12 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (showToast) {
+        const timer = setTimeout(() => setShowToast(false), 5000); // Extended for warnings
+        return () => clearTimeout(timer);
+    }
+  }, [showToast]);
 
   const calculateBalances = (transactions: Omit<Transaction, 'id' | 'balance'>[]): { transactionsWithBalances: Transaction[], finalBalance: number } => {
     let runningBalance = 0;
@@ -112,10 +124,22 @@ export default function App() {
 
     try {
       setLoadingMessage('Enviando para análise da IA. Isso pode levar alguns instantes...');
-      const { transactions: extractedTransactions, finalBalance } = await processBankStatementPDF(pdfFile);
+      const { transactions: extractedTransactions, finalBalance, accountHolderCNPJ } = await processBankStatementPDF(pdfFile);
       
       setLoadingMessage('Análise concluída. Finalizando e validando dados...');
       
+      // CNPJ Validation against File
+      if (accountHolderCNPJ && companyInfo) {
+          const fileCNPJ = accountHolderCNPJ.replace(/\D/g, '');
+          const formCNPJ = companyInfo.cnpj.replace(/\D/g, '');
+          
+          if (fileCNPJ && formCNPJ && fileCNPJ !== formCNPJ) {
+              setToastMessage(`ERRO: CNPJ do arquivo (${formatCNPJForDisplay(fileCNPJ)}) diverge do informado (${formatCNPJForDisplay(formCNPJ)}).`);
+              setToastType('error');
+              setShowToast(true);
+          }
+      }
+
       const transactionsWithFormattedCurrency = extractedTransactions.map(t => ({
         ...t,
         debit: t.debit > 0 ? t.debit.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "",
@@ -295,22 +319,30 @@ export default function App() {
     if (file && companyInfo) {
       const filenameBase = `${companyInfo.companyName.replace(/\s/g, '_')}_${file.name.replace('.pdf', '')}_exportado`;
       const commonFilename = (ext: string) => `${filenameBase}.${ext}`;
+      let finalFilename = '';
 
       switch (format) {
         case 'csv':
-          exportToCSV(filteredTransactions, commonFilename('csv'));
+            finalFilename = commonFilename('csv');
+          exportToCSV(filteredTransactions, finalFilename);
           break;
         case 'xlsx':
-          exportToXLSX(filteredTransactions, commonFilename('xlsx'));
+            finalFilename = commonFilename('xlsx');
+          exportToXLSX(filteredTransactions, finalFilename);
           break;
         case 'txt':
-          exportToTXT(filteredTransactions, commonFilename('txt'));
+            finalFilename = commonFilename('txt');
+          exportToTXT(filteredTransactions, finalFilename);
           break;
         case 'pdf':
-          exportToPDF(filteredTransactions, companyInfo, commonFilename('pdf'));
+            finalFilename = commonFilename('pdf');
+          exportToPDF(filteredTransactions, companyInfo, finalFilename);
           break;
       }
       setExportMenuOpen(false);
+      setToastMessage(`Arquivo ${finalFilename} exportado com sucesso!`);
+      setToastType('success');
+      setShowToast(true);
     }
   };
   
@@ -343,13 +375,47 @@ export default function App() {
         const newCategory = await suggestNewCategory(transaction.description, transaction.category);
         if (newCategory !== transaction.category) {
             handleDataChange({ ...transaction, category: newCategory }, 'category');
+            setToastMessage(`Categoria atualizada para: ${newCategory}`);
+            setToastType('success');
+            setShowToast(true);
+        } else {
+             setToastMessage(`Categoria mantida: ${transaction.category}`);
+             setToastType('success');
+             setShowToast(true);
         }
     } catch (error) {
         console.error("Falha ao sugerir categoria:", error);
+        setToastMessage("Não foi possível sugerir uma categoria neste momento.");
+        setToastType('warning');
+        setShowToast(true);
     } finally {
         setCategorizingId(null);
     }
   };
+
+  const getToastStyles = () => {
+      switch (toastType) {
+          case 'error':
+              return 'bg-red-600 text-white';
+          case 'warning':
+              return 'bg-orange-500 text-white';
+          case 'success':
+          default:
+              return 'bg-green-600 text-white';
+      }
+  };
+
+  const ToastIcon = useMemo(() => {
+      switch (toastType) {
+          case 'error':
+              return XCircleIcon;
+          case 'warning':
+              return ExclamationTriangleIcon;
+          case 'success':
+          default:
+              return CheckCircleIcon;
+      }
+  }, [toastType]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 dark:bg-slate-900 dark:text-slate-200">
@@ -505,6 +571,13 @@ export default function App() {
           )}
         </div>
       </main>
+      
+      {showToast && (
+        <div className={`fixed bottom-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg transition-all duration-300 transform translate-y-0 opacity-100 ${getToastStyles()}`}>
+            <ToastIcon className="h-6 w-6" />
+            <span className="font-medium">{toastMessage}</span>
+        </div>
+      )}
     </div>
   );
 }

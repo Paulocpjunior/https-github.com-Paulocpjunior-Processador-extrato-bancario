@@ -68,6 +68,10 @@ const responseSchema = {
     bankName: {
         type: Type.STRING,
         description: "O nome do banco do qual o extrato se origina (ex: Banco do Brasil, Itaú, Bradesco). Se não for encontrado, omita este campo."
+    },
+    accountHolderCNPJ: {
+        type: Type.STRING,
+        description: "O CNPJ do titular da conta ou da empresa proprietária do extrato bancário. Retorne apenas números. Se não encontrado, omita este campo."
     }
   },
   required: ['transactions']
@@ -85,7 +89,7 @@ export const processBankStatementPDF = async (file: File): Promise<GeminiTransac
     };
 
     const textPart = {
-        text: `Analise o extrato bancário em PDF. Para cada transação, extraia: data (AAAA-MM-DD), descrição, valor (como débito ou crédito), nome da empresa e CNPJ (apenas números), se disponível. Extraia também o nome do banco. Sugira uma categoria contábil da lista fornecida. Sinalize transações incomuns (valores muito altos, descrições estranhas) com 'isUnusual' como true e uma breve justificativa. Extraia o saldo final do extrato. Se um campo como CNPJ não estiver presente, retorne uma string vazia. Preencha o JSON estritamente conforme o schema.`,
+        text: `Analise o extrato bancário em PDF. Para cada transação, extraia: data (AAAA-MM-DD), descrição, valor (como débito ou crédito), nome da empresa e CNPJ (apenas números), se disponível. Extraia também o nome do banco e o CNPJ do titular da conta (empresa dona do extrato) se identificável no cabeçalho ou rodapé. Sugira uma categoria contábil da lista fornecida. Sinalize transações incomuns (valores muito altos, descrições estranhas) com 'isUnusual' como true e uma breve justificativa. Extraia o saldo final do extrato. Se um campo como CNPJ não estiver presente, retorne uma string vazia. Preencha o JSON estritamente conforme o schema.`,
     };
 
     try {
@@ -129,7 +133,7 @@ export const suggestDateCorrection = async (invalidDate: string): Promise<string
     if (!invalidDate.trim()) return "";
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-flash-latest',
+            model: 'gemini-2.5-flash',
             contents: `A seguinte string de data está incorreta: "${invalidDate}". Com base em erros comuns de OCR e digitação, qual é a data correta mais provável no formato AAAA-MM-DD? Responda apenas com a data corrigida. Exemplos: "2024.05.10" -> "2024-05-10", "30/02/2024" -> "2024-02-29", "2023-13-01" -> "2023-12-01".`,
             config: {
                 temperature: 0,
@@ -148,7 +152,7 @@ export const suggestNewCategory = async (description: string, currentCategory: s
     if (!description.trim()) return currentCategory;
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-flash-latest',
+            model: 'gemini-2.5-flash',
             contents: `Dada a descrição da transação: "${description}" e a categoria atual: "${currentCategory}", sugira a categoria mais apropriada da seguinte lista: [${TRANSACTION_CATEGORIES.join(', ')}]. Responda apenas com o nome da categoria. Se a categoria atual já for a melhor, retorne-a.`,
             config: {
                 temperature: 0.1,

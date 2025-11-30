@@ -1,5 +1,6 @@
 
 import { Transaction, CompanyInfo } from '../types';
+import { formatCNPJForDisplay } from './cnpjUtils';
 
 declare const XLSX: any;
 declare const jspdf: any;
@@ -144,9 +145,9 @@ export const exportToPDF = (data: Transaction[], companyInfo: CompanyInfo, filen
 
   const infoText = 
 `Empresa: ${companyInfo.companyName}
-CNPJ: ${companyInfo.cnpj}
-Banco: ${companyInfo.bankName}
+CNPJ: ${formatCNPJForDisplay(companyInfo.cnpj)}
 Período: ${formatDate(companyInfo.periodStart)} a ${formatDate(companyInfo.periodEnd)}
+Banco: ${companyInfo.bankName}
 Usuário: ${companyInfo.user}`;
 
   doc.text(infoText, 14, 32);

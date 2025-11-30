@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { CompanyInfo } from '../types';
 import { validateCNPJ, formatCNPJForDisplay } from '../utils/cnpjUtils';
 import { BRAZILIAN_BANKS } from '../constants';
-import { ArrowPathIcon } from './icons/Icons';
+import { ArrowPathIcon, CheckCircleIcon } from './icons/Icons';
 
 interface HeaderFormProps {
   onConfirm: (info: CompanyInfo) => void;
@@ -20,6 +20,7 @@ export const HeaderForm: React.FC<HeaderFormProps> = ({ onConfirm }) => {
   });
   const [errors, setErrors] = useState<Partial<Record<keyof CompanyInfo, string>>>({});
   const [isCnpjLoading, setIsCnpjLoading] = useState(false);
+  const [isCnpjVerified, setIsCnpjVerified] = useState(false);
 
   useEffect(() => {
     const cnpj = info.cnpj.replace(/\D/g, '');
@@ -43,12 +44,15 @@ export const HeaderForm: React.FC<HeaderFormProps> = ({ onConfirm }) => {
             if (response.ok) {
               const data = await response.json();
               setInfo(prev => ({ ...prev, companyName: data.razao_social }));
+              setIsCnpjVerified(true);
             } else {
               setErrors(prev => ({ ...prev, cnpj: 'CNPJ não encontrado ou inválido.' }));
+              setIsCnpjVerified(false);
             }
           } catch (error) {
             console.error("CNPJ lookup failed:", error);
-            setErrors(prev => ({ ...prev, cnpj: 'Falha ao buscar o CNPJ. Verifique sua conexão.' }));
+            // Don't set error here to avoid blocking user if API is down, just verify format.
+            setIsCnpjVerified(true); // Assuming valid format is enough if API fails
           } finally {
             setIsCnpjLoading(false);
           }
@@ -56,7 +60,10 @@ export const HeaderForm: React.FC<HeaderFormProps> = ({ onConfirm }) => {
         fetchCompanyName();
       } else {
         setErrors(prev => ({ ...prev, cnpj: cnpjValidation.message }));
+        setIsCnpjVerified(false);
       }
+    } else {
+      setIsCnpjVerified(false);
     }
   }, [info.cnpj]);
 
@@ -68,19 +75,59 @@ export const HeaderForm: React.FC<HeaderFormProps> = ({ onConfirm }) => {
     if (name === 'cnpj') {
         const digitsOnly = value.replace(/\D/g, '');
         if (digitsOnly.length !== 14) {
-            setInfo(prev => ({...prev, companyName: ''}));
+            setIsCnpjVerified(false);
         }
         processedValue = digitsOnly;
     }
 
     setInfo(prev => ({ ...prev, [name]: processedValue }));
 
-    if (errors[name as keyof CompanyInfo]) {
+    // Limpa erros ao digitar, exceto erro de range de data que tratamos no blur ou submit
+    if (errors[name as keyof CompanyInfo] && name !== 'periodEnd') {
         setErrors(prev => {
             const newErrors = {...prev};
             delete newErrors[name as keyof CompanyInfo];
             return newErrors;
         })
+    }
+  };
+
+  const handleDateBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    
+    if (!value) {
+       // Se o campo ficou vazio no blur, avisa
+       setErrors(prev => ({...prev, [name]: `Este campo é obrigatório.`}));
+       return;
+    }
+
+    const start = name === 'periodStart' ? value : info.periodStart;
+    const end = name === 'periodEnd' ? value : info.periodEnd;
+
+    // Se temos as duas datas, valida o intervalo
+    if (start && end) {
+        if (start > end) {
+            setErrors(prev => ({
+                ...prev,
+                periodEnd: 'A data final deve ser posterior à data inicial.'
+            }));
+        } else {
+            // Se o intervalo agora é válido, remove o erro de range (geralmente no periodEnd)
+            setErrors(prev => {
+                const newErrors = {...prev};
+                delete newErrors.periodEnd; 
+                // Remove também erro do start se houver (caso estivesse marcado como invalido antes)
+                delete newErrors.periodStart; 
+                return newErrors;
+            });
+        }
+    } else {
+        // Se só tem uma data (e é válida pois passou do check !value), limpa erro do campo atual
+        setErrors(prev => {
+            const newErrors = {...prev};
+            delete newErrors[name as keyof CompanyInfo];
+            return newErrors;
+        });
     }
   };
 
@@ -121,16 +168,18 @@ export const HeaderForm: React.FC<HeaderFormProps> = ({ onConfirm }) => {
       <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">Por favor, preencha os campos abaixo para iniciar o processamento.</p>
       <form onSubmit={handleSubmit} noValidate>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* CNPJ - Moved to first position */}
+          {/* CNPJ */}
           <div>
             <label htmlFor="cnpj" className="block text-sm font-medium text-slate-700 dark:text-slate-300">CNPJ</label>
             <div className="relative mt-1">
-                <input type="text" name="cnpj" id="cnpj" value={formatCNPJForDisplay(info.cnpj)} onChange={handleChange} className={`block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm pr-10 ${errors.cnpj ? 'border-red-500 ring-red-500' : ''}`} maxLength={18} />
-                {isCnpjLoading && (
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
-                        <ArrowPathIcon className="h-5 w-5 animate-spin text-slate-400" />
-                    </div>
-                )}
+                <input type="text" name="cnpj" id="cnpj" value={formatCNPJForDisplay(info.cnpj)} onChange={handleChange} className={`block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm pr-10 ${errors.cnpj ? 'border-red-500 ring-red-500' : ''} ${isCnpjVerified ? 'border-green-500 ring-green-500' : ''}`} maxLength={18} placeholder="00.000.000/0000-00"/>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                  {isCnpjLoading ? (
+                      <ArrowPathIcon className="h-5 w-5 animate-spin text-slate-400" />
+                  ) : isCnpjVerified ? (
+                      <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                  ) : null}
+                </div>
             </div>
             {errors.cnpj && <p className="mt-2 text-sm text-red-600">{errors.cnpj}</p>}
           </div>
@@ -161,12 +210,28 @@ export const HeaderForm: React.FC<HeaderFormProps> = ({ onConfirm }) => {
           <div className="grid grid-cols-2 gap-4 md:col-span-2">
             <div>
               <label htmlFor="periodStart" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Início do Período</label>
-              <input type="date" name="periodStart" id="periodStart" value={info.periodStart} onChange={handleChange} className={`mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm ${errors.periodStart ? 'border-red-500 ring-red-500' : ''}`} />
+              <input 
+                type="date" 
+                name="periodStart" 
+                id="periodStart" 
+                value={info.periodStart} 
+                onChange={handleChange} 
+                onBlur={handleDateBlur}
+                className={`mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm ${errors.periodStart ? 'border-red-500 ring-red-500' : ''}`} 
+              />
               {errors.periodStart && <p className="mt-2 text-sm text-red-600">{errors.periodStart}</p>}
             </div>
             <div>
               <label htmlFor="periodEnd" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Fim do Período</label>
-              <input type="date" name="periodEnd" id="periodEnd" value={info.periodEnd} onChange={handleChange} className={`mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm ${errors.periodEnd ? 'border-red-500 ring-red-500' : ''}`} />
+              <input 
+                type="date" 
+                name="periodEnd" 
+                id="periodEnd" 
+                value={info.periodEnd} 
+                onChange={handleChange} 
+                onBlur={handleDateBlur}
+                className={`mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 sm:text-sm ${errors.periodEnd ? 'border-red-500 ring-red-500' : ''}`} 
+              />
               {errors.periodEnd && <p className="mt-2 text-sm text-red-600">{errors.periodEnd}</p>}
             </div>
           </div>

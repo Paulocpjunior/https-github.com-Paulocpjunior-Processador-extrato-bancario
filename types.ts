@@ -17,6 +17,7 @@ export interface GeminiTransactionResponse {
     transactions: (Omit<Transaction, 'id' | 'balance' | 'debit' | 'credit'> & { debit: number, credit: number })[];
     finalBalance?: number;
     bankName?: string;
+    accountHolderCNPJ?: string;
 }
 
 export interface DateValidationError {
