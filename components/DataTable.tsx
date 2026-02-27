@@ -204,15 +204,16 @@ export const DataTable: React.FC<DataTableProps> = ({ transactions, onDataChange
                         <button 
                             onClick={() => onSuggestCategory(transaction.id)}
                             disabled={!!categorizingId}
-                            className="p-1 rounded-full text-slate-400 hover:bg-blue-100 hover:text-blue-600 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md text-blue-600 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
                             aria-label="Sugerir categoria com IA"
                             title="Sugerir categoria com IA"
                         >
                             {categorizingId === transaction.id ? (
-                                <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                                <ArrowPathIcon className="h-3 w-3 animate-spin" />
                             ) : (
-                                <SparklesIcon className="h-4 w-4" />
+                                <SparklesIcon className="h-3 w-3" />
                             )}
+                            Sugestão IA
                         </button>
                    </div>
                 </td>

@@ -140,14 +140,18 @@ export default function App() {
           }
       }
 
-      const transactionsWithFormattedCurrency = extractedTransactions.map(t => ({
-        ...t,
-        debit: t.debit > 0 ? t.debit.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "",
-        credit: t.credit > 0 ? t.credit.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "",
-        category: t.category || 'Não categorizado',
-        isUnusual: t.isUnusual || false,
-        unusualReason: t.unusualReason || '',
-      }));
+      const transactionsWithFormattedCurrency = extractedTransactions.map(t => {
+        const debitValue = Math.abs(t.debit || 0);
+        const creditValue = Math.abs(t.credit || 0);
+        return {
+          ...t,
+          debit: debitValue > 0 ? debitValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "",
+          credit: creditValue > 0 ? creditValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "",
+          category: t.category || 'Não categorizado',
+          isUnusual: t.isUnusual || false,
+          unusualReason: t.unusualReason || '',
+        };
+      });
 
       const { transactionsWithBalances } = calculateBalances(transactionsWithFormattedCurrency);
       setTransactions(transactionsWithBalances);

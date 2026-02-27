@@ -31,11 +31,11 @@ const responseSchema = {
           },
           debit: { 
             type: Type.NUMBER, 
-            description: 'O valor do débito (saída). Deve ser 0 se a transação for um crédito.' 
+            description: 'O valor do débito (saída de dinheiro, pagamentos, tarifas, valores negativos). Deve ser sempre um número positivo. Coloque 0 se for crédito.' 
           },
           credit: { 
             type: Type.NUMBER, 
-            description: 'O valor do crédito (entrada). Deve ser 0 se a transação for um débito.' 
+            description: 'O valor do crédito (entrada de dinheiro, recebimentos, depósitos, valores positivos). Deve ser sempre um número positivo. Coloque 0 se for débito.' 
           },
           companyName: {
             type: Type.STRING,
@@ -89,7 +89,15 @@ export const processBankStatementPDF = async (file: File): Promise<GeminiTransac
     };
 
     const textPart = {
-        text: `Analise o extrato bancário em PDF. Para cada transação, extraia: data (AAAA-MM-DD), descrição, valor (como débito ou crédito), nome da empresa e CNPJ (apenas números), se disponível. Extraia também o nome do banco e o CNPJ do titular da conta (empresa dona do extrato) se identificável no cabeçalho ou rodapé. Sugira uma categoria contábil da lista fornecida. Sinalize transações incomuns (valores muito altos, descrições estranhas) com 'isUnusual' como true e uma breve justificativa. Extraia o saldo final do extrato. Se um campo como CNPJ não estiver presente, retorne uma string vazia. Preencha o JSON estritamente conforme o schema.`,
+        text: `Analise o extrato bancário em PDF. Para cada transação, extraia: data (AAAA-MM-DD), descrição, valor (como débito ou crédito), nome da empresa e CNPJ (apenas números), se disponível. Extraia também o nome do banco e o CNPJ do titular da conta (empresa dona do extrato) se identificável no cabeçalho ou rodapé. Sugira uma categoria contábil da lista fornecida. Sinalize transações incomuns (valores muito altos, descrições estranhas) com 'isUnusual' como true e uma breve justificativa. Extraia o saldo final do extrato. Se um campo como CNPJ não estiver presente, retorne uma string vazia. Preencha o JSON estritamente conforme o schema. 
+        
+        REGRA CRÍTICA PARA VALORES: 
+        A classificação entre Débito e Crédito DEVE ser baseada ESTRITAMENTE na coluna em que o valor aparece no extrato original, ou no sinal do valor (negativo = débito, positivo = crédito). 
+        IGNORE palavras na descrição como "pagamento", "recebimento", "transferência" se elas contradisserem a coluna do valor. 
+        Por exemplo: se a descrição diz "Pagamento" mas o valor está na coluna de Crédito (ou é positivo), você DEVE classificá-lo como Crédito (recebimento).
+        Débito = saídas/pagamentos (valores negativos ou na coluna de saída). 
+        Crédito = entradas/recebimentos (valores positivos ou na coluna de entrada). 
+        Retorne os valores de débito e crédito sempre como números positivos absolutos. Nunca coloque o mesmo valor em débito e crédito.`,
     };
 
     try {
