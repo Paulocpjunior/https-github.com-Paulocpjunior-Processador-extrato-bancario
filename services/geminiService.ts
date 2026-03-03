@@ -130,9 +130,18 @@ export const processBankStatementPDF = async (file: File): Promise<GeminiTransac
 
         return parsedResponse;
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error processing PDF with Gemini API:", error);
-        throw new Error("O modelo de IA não conseguiu processar este documento. Verifique se é um extrato bancário válido.");
+        
+        // Log more details if it's an API error
+        if (error.status) {
+            console.error("API Status:", error.status);
+        }
+        if (error.message) {
+            console.error("API Message:", error.message);
+        }
+        
+        throw new Error(`O modelo de IA não conseguiu processar este documento. Detalhe do erro: ${error.message || 'Erro desconhecido'}. Verifique se é um extrato bancário válido.`);
     }
 };
 
