@@ -19,11 +19,24 @@ const ai = new GoogleGenAI({ apiKey: API_KEY });
  * Helper to clean JSON response from LLM
  */
 const cleanJsonResponse = (text: string): string => {
-    // Remove markdown code blocks if present
     let cleaned = text.trim();
     if (cleaned.startsWith('```')) {
         cleaned = cleaned.replace(/^```json\n?/, '').replace(/```$/, '').trim();
     }
+
+    // Auto-repair truncated JSON (basic check for matching brackets)
+    const openBraces = (cleaned.match(/{/g) || []).length;
+    const closeBraces = (cleaned.match(/}/g) || []).length;
+    const openBrackets = (cleaned.match(/\[/g) || []).length;
+    const closeBrackets = (cleaned.match(/\]/g) || []).length;
+
+    if (openBrackets > closeBrackets) {
+        cleaned += ']'.repeat(openBrackets - closeBrackets);
+    }
+    if (openBraces > closeBraces) {
+        cleaned += '}'.repeat(openBraces - closeBraces);
+    }
+
     return cleaned;
 };
 
@@ -130,16 +143,13 @@ export const processBankStatementPDF = async (file: File): Promise<GeminiTransac
         REGRA CRÍTICA PARA VALORES: 
         A classificação entre Débito e Crédito DEVE ser baseada ESTRITAMENTE na coluna em que o valor aparece no extrato original, ou no sinal do valor (negativo = débito, positivo = crédito). 
         IGNORE palavras na descrição como "pagamento", "recebimento", "transferência" se elas contradisserem a coluna do valor. 
-        Por exemplo: se a descrição diz "Pagamento" mas o valor está na coluna de Crédito (ou é positivo), você DEVE classificá-lo como Crédito (recebimento).
-        Débito = saídas/pagamentos (valores negativos ou na coluna de saída). 
-        Débito = saídas/pagamentos (valores negativos ou na coluna de saída). 
-        Crédito = entradas/recebimentos (valores positivos ou na coluna de entrada). 
-        Retorne os valores de débito e crédito sempre como números positivos absolutos. Nunca coloque o mesmo valor em débito e crédito.
+        Débito = saídas/pagamentos (negativo ou coluna de saída). Crédito = entradas/recebimentos (positivo ou coluna de entrada). Retorne valores como números positivos absolutos.
         
-        INFORMAÇÕES CONTÁBEIS:
-        Sempre infira 'accountDebit', 'accountCredit' e 'accountingHistory'. Crie um histórico limpo e padronizado em CAIXA ALTA (ex: "VLR REF PAGTO ..."). Para as contas, use nomes genéricos de plano de contas (ex: "Bancos Conta Movimento", "Fornecedores Diversos") se não souber um código numérico adequado.
-
-        Extraia o saldo final do extrato. Se um campo como CNPJ não estiver presente, retorne uma string vazia. Preencha o JSON estritamente conforme o schema.`,
+        CONTABILIDADE:
+        Sempre infira 'accountDebit', 'accountCredit' e 'accountingHistory'. Use CAIXA ALTA e nomes genéricos de plano de contas (ex: "Bancos", "Fornecedores") se não souber o código.
+        
+        REGRAS FINAIS:
+        Seja conciso. Se um campo for inexistente, retorne "". Preencha o JSON estritamente conforme o schema.`,
     };
 
     try {
@@ -149,7 +159,8 @@ export const processBankStatementPDF = async (file: File): Promise<GeminiTransac
             config: {
                 responseMimeType: "application/json",
                 responseSchema: responseSchema,
-                temperature: 0,
+                temperature: 0.1,
+                maxOutputTokens: 8192,
             },
         });
 
