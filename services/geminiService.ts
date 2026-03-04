@@ -13,8 +13,19 @@ const API_KEY = windowEnvKey !== "__GEMINI_API_KEY__" ? windowEnvKey : processEn
 if (!API_KEY || API_KEY === "__GEMINI_API_KEY__") {
     throw new Error("A variável de ambiente GEMINI_API_KEY não está definida.");
 }
-
 const ai = new GoogleGenAI({ apiKey: API_KEY });
+
+/**
+ * Helper to clean JSON response from LLM
+ */
+const cleanJsonResponse = (text: string): string => {
+    // Remove markdown code blocks if present
+    let cleaned = text.trim();
+    if (cleaned.startsWith('```')) {
+        cleaned = cleaned.replace(/^```json\n?/, '').replace(/```$/, '').trim();
+    }
+    return cleaned;
+};
 
 const responseSchema = {
     type: Type.OBJECT,
@@ -142,8 +153,15 @@ export const processBankStatementPDF = async (file: File): Promise<GeminiTransac
             },
         });
 
-        const jsonText = response.text.trim();
-        const parsedResponse: GeminiTransactionResponse = JSON.parse(jsonText);
+        const jsonText = cleanJsonResponse(response.text);
+        let parsedResponse: GeminiTransactionResponse;
+
+        try {
+            parsedResponse = JSON.parse(jsonText);
+        } catch (parseError) {
+            console.error("Failed to parse Gemini JSON:", jsonText);
+            throw new Error(`Erro na resposta da IA: O formato dos dados retornados está incompleto (JSON Parse error). Isso geralmente acontece com documentos muito longos. Tente processar o documento novamente ou em partes menores.`);
+        }
 
         if (!parsedResponse.transactions || !Array.isArray(parsedResponse.transactions)) {
             throw new Error("Estrutura JSON inválida recebida da API.");
@@ -205,7 +223,7 @@ export const suggestNewCategory = async (description: string, currentCategory: s
     if (!description.trim()) return currentCategory;
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-2.0-flash',
             contents: `Dada a descrição da transação: "${description}" e a categoria atual: "${currentCategory}", sugira a categoria mais apropriada da seguinte lista: [${TRANSACTION_CATEGORIES.join(', ')}]. Responda apenas com o nome da categoria. Se a categoria atual já for a melhor, retorne-a.`,
             config: {
                 temperature: 0.1,
