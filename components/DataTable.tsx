@@ -16,12 +16,12 @@ interface DataTableProps {
 }
 
 const TableInput: React.FC<{
-    value: string | number;
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    type?: 'text' | 'number' | 'date';
-    className?: string;
-    hasError?: boolean;
-    maxLength?: number;
+  value: string | number;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  type?: 'text' | 'number' | 'date';
+  className?: string;
+  hasError?: boolean;
+  maxLength?: number;
 }> = ({ value, onChange, type = 'text', className, hasError = false, maxLength }) => {
   const errorClasses = hasError ? 'ring-2 ring-red-500 focus:ring-red-500' : 'focus:ring-2 focus:ring-blue-500';
   return (
@@ -36,7 +36,7 @@ const TableInput: React.FC<{
 };
 
 export const DataTable: React.FC<DataTableProps> = ({ transactions, onDataChange, dateErrors, cnpjErrors, currencyErrors, onSuggestCategory, categorizingId }) => {
-  
+
   const handleFieldChange = (id: string, field: keyof Omit<Transaction, 'id' | 'balance'>, value: string | number) => {
     const transactionToUpdate = transactions.find(t => t.id === id);
     if (transactionToUpdate) {
@@ -47,7 +47,7 @@ export const DataTable: React.FC<DataTableProps> = ({ transactions, onDataChange
       onDataChange({ ...transactionToUpdate, [field]: processedValue }, field);
     }
   };
-  
+
   const formatCurrency = (value: number | string) => {
     const numValue = Number(value);
     if (isNaN(numValue)) return String(value);
@@ -55,61 +55,64 @@ export const DataTable: React.FC<DataTableProps> = ({ transactions, onDataChange
   }
 
   // Virtualization Logic
-  const ROW_HEIGHT = 60; 
-  const VISIBLE_HEIGHT = 600; 
+  const ROW_HEIGHT = 60;
+  const VISIBLE_HEIGHT = 600;
   const BUFFER = 5;
 
   const [scrollTop, setScrollTop] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-      setScrollTop(e.currentTarget.scrollTop);
+    setScrollTop(e.currentTarget.scrollTop);
   };
 
   // Reset scroll when filtering or list size changes significantly
   useEffect(() => {
     if (containerRef.current) {
-        containerRef.current.scrollTop = 0;
-        setScrollTop(0);
+      containerRef.current.scrollTop = 0;
+      setScrollTop(0);
     }
   }, [transactions.length]);
 
   const { virtualItems, paddingTop, paddingBottom } = useMemo(() => {
-      const startIndex = Math.floor(scrollTop / ROW_HEIGHT);
-      const effectiveStartIndex = Math.max(0, startIndex - BUFFER);
-      
-      const endIndex = Math.min(
-        transactions.length, 
-        Math.ceil((scrollTop + VISIBLE_HEIGHT) / ROW_HEIGHT) + BUFFER
-      );
+    const startIndex = Math.floor(scrollTop / ROW_HEIGHT);
+    const effectiveStartIndex = Math.max(0, startIndex - BUFFER);
 
-      const virtualItems = transactions.slice(effectiveStartIndex, endIndex);
-      
-      const paddingTop = effectiveStartIndex * ROW_HEIGHT;
-      const paddingBottom = Math.max(0, (transactions.length - endIndex) * ROW_HEIGHT);
+    const endIndex = Math.min(
+      transactions.length,
+      Math.ceil((scrollTop + VISIBLE_HEIGHT) / ROW_HEIGHT) + BUFFER
+    );
 
-      return { virtualItems, paddingTop, paddingBottom };
+    const virtualItems = transactions.slice(effectiveStartIndex, endIndex);
+
+    const paddingTop = effectiveStartIndex * ROW_HEIGHT;
+    const paddingBottom = Math.max(0, (transactions.length - endIndex) * ROW_HEIGHT);
+
+    return { virtualItems, paddingTop, paddingBottom };
   }, [transactions, scrollTop]);
 
 
   return (
-    <div 
+    <div
       className="overflow-auto relative border rounded-lg border-slate-200 dark:border-slate-700"
       style={{ maxHeight: `${VISIBLE_HEIGHT}px` }}
       ref={containerRef}
       onScroll={handleScroll}
     >
-      <table className="min-w-full text-sm text-left text-slate-500 dark:text-slate-400 border-collapse table-fixed">
+      <table className="min-w-[1400px] text-sm text-left text-slate-500 dark:text-slate-400 border-collapse table-fixed">
         <thead className="text-xs text-slate-700 uppercase bg-slate-50 dark:bg-slate-700 dark:text-slate-300 sticky top-0 z-20 shadow-sm">
           <tr>
-            <th scope="col" className="px-4 py-3 w-[10%] bg-slate-50 dark:bg-slate-700">Data</th>
-            <th scope="col" className="px-4 py-3 w-[25%] bg-slate-50 dark:bg-slate-700">Descrição</th>
-            <th scope="col" className="px-4 py-3 w-[15%] bg-slate-50 dark:bg-slate-700">Nome da Empresa</th>
-            <th scope="col" className="px-4 py-3 w-[12%] bg-slate-50 dark:bg-slate-700">CNPJ</th>
-            <th scope="col" className="px-4 py-3 w-[12%] bg-slate-50 dark:bg-slate-700">Categoria</th>
-            <th scope="col" className="px-4 py-3 text-right w-[9%] bg-slate-50 dark:bg-slate-700">Débito</th>
-            <th scope="col" className="px-4 py-3 text-right w-[9%] bg-slate-50 dark:bg-slate-700">Crédito</th>
-            <th scope="col" className="px-4 py-3 text-right w-[8%] bg-slate-50 dark:bg-slate-700">Saldo</th>
+            <th scope="col" className="px-4 py-3 w-[120px] bg-slate-50 dark:bg-slate-700">Data</th>
+            <th scope="col" className="px-4 py-3 w-[250px] bg-slate-50 dark:bg-slate-700">Descrição</th>
+            <th scope="col" className="px-4 py-3 w-[150px] bg-slate-50 dark:bg-slate-700">Empresa</th>
+            <th scope="col" className="px-4 py-3 w-[140px] bg-slate-50 dark:bg-slate-700">CNPJ</th>
+            <th scope="col" className="px-4 py-3 w-[150px] bg-slate-50 dark:bg-slate-700">Categoria</th>
+            <th scope="col" className="px-4 py-3 w-[150px] bg-slate-50 dark:bg-slate-700">C. Débito</th>
+            <th scope="col" className="px-4 py-3 w-[150px] bg-slate-50 dark:bg-slate-700">C. Crédito</th>
+            <th scope="col" className="px-4 py-3 w-[200px] bg-slate-50 dark:bg-slate-700">Histórico</th>
+            <th scope="col" className="px-4 py-3 text-right w-[120px] bg-slate-50 dark:bg-slate-700">Débito</th>
+            <th scope="col" className="px-4 py-3 text-right w-[120px] bg-slate-50 dark:bg-slate-700">Crédito</th>
+            <th scope="col" className="px-4 py-3 text-right w-[120px] bg-slate-50 dark:bg-slate-700">Saldo</th>
           </tr>
         </thead>
         <tbody>
@@ -124,126 +127,144 @@ export const DataTable: React.FC<DataTableProps> = ({ transactions, onDataChange
             const isUnusual = transaction.isUnusual;
 
             return (
-              <tr 
-                key={transaction.id} 
+              <tr
+                key={transaction.id}
                 style={{ height: ROW_HEIGHT }}
                 className={`border-b dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-900/20 
                   ${isUnusual ? 'bg-yellow-50 dark:bg-yellow-900/20' : 'bg-white dark:bg-slate-800'}`
                 }>
                 <td className="px-2 py-1 relative align-top">
-                   <TableInput 
-                      type="date"
-                      value={transaction.date} 
-                      onChange={(e) => handleFieldChange(transaction.id, 'date', e.target.value)}
-                      hasError={!!dateError}
-                   />
-                   {dateError && (
-                     <div className="absolute left-2 top-full mt-1 p-2 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-200 text-xs rounded-md shadow-lg z-10 w-max max-w-xs" role="alert">
-                       <p className="font-medium">{dateError.message}</p>
-                       {dateError.suggestion && (
-                         <p className="mt-1">
-                           Sugestão:{' '}
-                           <button
-                             className="font-semibold underline hover:text-red-900 dark:hover:text-red-100"
-                             onClick={() => handleFieldChange(transaction.id, 'date', dateError.suggestion!)}
-                           >
-                             {dateError.suggestion}
-                           </button>
-                         </p>
-                       )}
-                     </div>
-                   )}
+                  <TableInput
+                    type="date"
+                    value={transaction.date}
+                    onChange={(e) => handleFieldChange(transaction.id, 'date', e.target.value)}
+                    hasError={!!dateError}
+                  />
+                  {dateError && (
+                    <div className="absolute left-2 top-full mt-1 p-2 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-200 text-xs rounded-md shadow-lg z-10 w-max max-w-xs" role="alert">
+                      <p className="font-medium">{dateError.message}</p>
+                      {dateError.suggestion && (
+                        <p className="mt-1">
+                          Sugestão:{' '}
+                          <button
+                            className="font-semibold underline hover:text-red-900 dark:hover:text-red-100"
+                            onClick={() => handleFieldChange(transaction.id, 'date', dateError.suggestion!)}
+                          >
+                            {dateError.suggestion}
+                          </button>
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </td>
                 <td className="px-2 py-1 align-top">
-                   <div className="flex items-center gap-2">
-                     <TableInput 
-                        value={transaction.description} 
-                        onChange={(e) => handleFieldChange(transaction.id, 'description', e.target.value)}
-                        className="flex-grow"
-                     />
-                     {isUnusual && (
-                       <div className="relative group flex-shrink-0">
-                         <ExclamationTriangleIcon className="h-5 w-5 text-yellow-500" />
-                         <div className="absolute bottom-full mb-2 -left-1/2 -translate-x-1/2 w-48 p-2 bg-slate-700 text-white text-xs rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10" role="tooltip">
-                           <span className="font-bold block">Transação Incomum:</span>
-                           {transaction.unusualReason}
-                         </div>
-                       </div>
-                     )}
-                   </div>
+                  <div className="flex items-center gap-2">
+                    <TableInput
+                      value={transaction.description}
+                      onChange={(e) => handleFieldChange(transaction.id, 'description', e.target.value)}
+                      className="flex-grow"
+                    />
+                    {isUnusual && (
+                      <div className="relative group flex-shrink-0">
+                        <ExclamationTriangleIcon className="h-5 w-5 text-yellow-500" />
+                        <div className="absolute bottom-full mb-2 -left-1/2 -translate-x-1/2 w-48 p-2 bg-slate-700 text-white text-xs rounded-md shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10" role="tooltip">
+                          <span className="font-bold block">Transação Incomum:</span>
+                          {transaction.unusualReason}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </td>
-                 <td className="px-2 py-1 align-top">
-                   <TableInput 
-                      value={transaction.companyName} 
-                      onChange={(e) => handleFieldChange(transaction.id, 'companyName', e.target.value)}
-                   />
+                <td className="px-2 py-1 align-top">
+                  <TableInput
+                    value={transaction.companyName}
+                    onChange={(e) => handleFieldChange(transaction.id, 'companyName', e.target.value)}
+                  />
                 </td>
-                 <td className="px-2 py-1 relative align-top">
-                   <TableInput 
-                      value={formatCNPJForDisplay(transaction.cnpj)} 
-                      onChange={(e) => handleFieldChange(transaction.id, 'cnpj', e.target.value)}
-                      hasError={!!cnpjError}
-                      maxLength={18}
-                   />
-                    {cnpjError && (
-                     <div className="absolute left-2 top-full mt-1 p-2 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-200 text-xs rounded-md shadow-lg z-10 w-max max-w-xs" role="alert">
-                       <p className="font-medium">{cnpjError.message}</p>
-                     </div>
-                   )}
+                <td className="px-2 py-1 relative align-top">
+                  <TableInput
+                    value={formatCNPJForDisplay(transaction.cnpj)}
+                    onChange={(e) => handleFieldChange(transaction.id, 'cnpj', e.target.value)}
+                    hasError={!!cnpjError}
+                    maxLength={18}
+                  />
+                  {cnpjError && (
+                    <div className="absolute left-2 top-full mt-1 p-2 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-200 text-xs rounded-md shadow-lg z-10 w-max max-w-xs" role="alert">
+                      <p className="font-medium">{cnpjError.message}</p>
+                    </div>
+                  )}
                 </td>
-                 <td className="px-2 py-1 align-top">
-                   <div className="relative flex items-center gap-1">
-                        <select
-                            value={transaction.category}
-                            onChange={(e) => handleFieldChange(transaction.id, 'category', e.target.value)}
-                            className="w-full bg-transparent p-2 focus:outline-none focus:bg-blue-100 dark:focus:bg-slate-700 rounded-md transition-colors duration-200 focus:ring-2 focus:ring-blue-500"
-                            disabled={categorizingId === transaction.id}
-                            >
-                            {TRANSACTION_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                        </select>
-                        <button 
-                            onClick={() => onSuggestCategory(transaction.id)}
-                            disabled={!!categorizingId}
-                            className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md text-blue-600 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
-                            aria-label="Sugerir categoria com IA"
-                            title="Sugerir categoria com IA"
-                        >
-                            {categorizingId === transaction.id ? (
-                                <ArrowPathIcon className="h-3 w-3 animate-spin" />
-                            ) : (
-                                <SparklesIcon className="h-3 w-3" />
-                            )}
-                            Sugestão IA
-                        </button>
-                   </div>
+                <td className="px-2 py-1 align-top">
+                  <div className="relative flex items-center gap-1">
+                    <select
+                      value={transaction.category}
+                      onChange={(e) => handleFieldChange(transaction.id, 'category', e.target.value)}
+                      className="w-full bg-transparent p-2 focus:outline-none focus:bg-blue-100 dark:focus:bg-slate-700 rounded-md transition-colors duration-200 focus:ring-2 focus:ring-blue-500"
+                      disabled={categorizingId === transaction.id}
+                    >
+                      {TRANSACTION_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    </select>
+                    <button
+                      onClick={() => onSuggestCategory(transaction.id)}
+                      disabled={!!categorizingId}
+                      className="flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-md text-blue-600 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                      aria-label="Sugerir categoria com IA"
+                      title="Sugerir categoria com IA"
+                    >
+                      {categorizingId === transaction.id ? (
+                        <ArrowPathIcon className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <SparklesIcon className="h-3 w-3" />
+                      )}
+                      Sugestão IA
+                    </button>
+                  </div>
+                </td>
+                <td className="px-2 py-1 align-top">
+                  <TableInput
+                    value={transaction.accountDebit}
+                    onChange={(e) => handleFieldChange(transaction.id, 'accountDebit', e.target.value)}
+                  />
+                </td>
+                <td className="px-2 py-1 align-top">
+                  <TableInput
+                    value={transaction.accountCredit}
+                    onChange={(e) => handleFieldChange(transaction.id, 'accountCredit', e.target.value)}
+                  />
+                </td>
+                <td className="px-2 py-1 align-top">
+                  <TableInput
+                    value={transaction.accountingHistory}
+                    onChange={(e) => handleFieldChange(transaction.id, 'accountingHistory', e.target.value)}
+                  />
                 </td>
                 <td className="px-2 py-1 text-right font-mono text-red-600 dark:text-red-400 align-top relative">
-                   <TableInput
-                      type="text"
-                      value={transaction.debit} 
-                      onChange={(e) => handleFieldChange(transaction.id, 'debit', e.target.value)}
-                      className="text-right"
-                      hasError={!!debitError}
-                   />
-                   {debitError && (
-                     <div className="absolute right-2 top-full mt-1 p-2 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-200 text-xs rounded-md shadow-lg z-10 w-max max-w-xs" role="alert">
-                       <p className="font-medium">{debitError.message}</p>
-                     </div>
-                   )}
+                  <TableInput
+                    type="text"
+                    value={transaction.debit}
+                    onChange={(e) => handleFieldChange(transaction.id, 'debit', e.target.value)}
+                    className="text-right"
+                    hasError={!!debitError}
+                  />
+                  {debitError && (
+                    <div className="absolute right-2 top-full mt-1 p-2 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-200 text-xs rounded-md shadow-lg z-10 w-max max-w-xs" role="alert">
+                      <p className="font-medium">{debitError.message}</p>
+                    </div>
+                  )}
                 </td>
                 <td className="px-2 py-1 text-right font-mono text-green-600 dark:text-green-400 align-top relative">
-                   <TableInput
-                      type="text"
-                      value={transaction.credit} 
-                      onChange={(e) => handleFieldChange(transaction.id, 'credit', e.target.value)}
-                      className="text-right"
-                      hasError={!!creditError}
-                   />
-                   {creditError && (
-                     <div className="absolute right-2 top-full mt-1 p-2 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-200 text-xs rounded-md shadow-lg z-10 w-max max-w-xs" role="alert">
-                       <p className="font-medium">{creditError.message}</p>
-                     </div>
-                   )}
+                  <TableInput
+                    type="text"
+                    value={transaction.credit}
+                    onChange={(e) => handleFieldChange(transaction.id, 'credit', e.target.value)}
+                    className="text-right"
+                    hasError={!!creditError}
+                  />
+                  {creditError && (
+                    <div className="absolute right-2 top-full mt-1 p-2 bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-200 text-xs rounded-md shadow-lg z-10 w-max max-w-xs" role="alert">
+                      <p className="font-medium">{creditError.message}</p>
+                    </div>
+                  )}
                 </td>
                 <td className="px-6 py-2 text-right font-mono text-slate-700 dark:text-slate-300 align-middle">
                   {formatCurrency(transaction.balance)}

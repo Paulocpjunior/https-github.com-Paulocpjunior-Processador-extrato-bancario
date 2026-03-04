@@ -1,16 +1,19 @@
 
 export interface Transaction {
-  id: string;
-  date: string;
-  description: string;
-  debit: string;
-  credit: string;
-  balance: number | string;
-  companyName: string;
-  cnpj: string;
-  category: string;
-  isUnusual: boolean;
-  unusualReason: string;
+    id: string;
+    date: string;
+    description: string;
+    debit: string;
+    credit: string;
+    balance: number | string;
+    companyName: string;
+    cnpj: string;
+    category: string;
+    isUnusual: boolean;
+    unusualReason: string;
+    accountDebit: string;
+    accountCredit: string;
+    accountingHistory: string;
 }
 
 export interface GeminiTransactionResponse {

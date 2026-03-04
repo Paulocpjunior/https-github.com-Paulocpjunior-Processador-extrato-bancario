@@ -2,9 +2,17 @@
 import { Transaction, CompanyInfo } from '../types';
 import { formatCNPJForDisplay } from './cnpjUtils';
 
-declare const XLSX: any;
-declare const jspdf: any;
-declare const pdfjsLib: any;
+declare global {
+  interface Window {
+    XLSX: any;
+    jspdf: any;
+    pdfjsLib: any;
+  }
+}
+
+const getXLSX = () => window.XLSX;
+const getJsPDF = () => window.jspdf;
+const getPdfjsLib = () => window.pdfjsLib;
 
 export const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -28,7 +36,13 @@ export const countPdfPages = async (file: File): Promise<number> => {
       try {
         // Using a smaller range of the file if possible would be better for large files,
         // but getDocument with ArrayBuffer is simplest for now.
-        const loadingTask = pdfjsLib.getDocument({ data: reader.result });
+        const pdfjs = getPdfjsLib();
+        if (!pdfjs) {
+          console.warn("pdfjsLib is not loaded.");
+          resolve(0);
+          return;
+        }
+        const loadingTask = pdfjs.getDocument({ data: reader.result });
         const pdf = await loadingTask.promise;
         resolve(pdf.numPages);
       } catch (error) {
@@ -55,21 +69,24 @@ const downloadBlob = (blob: Blob, filename: string) => {
   }
 };
 
-const HEADERS = ['Data', 'Descrição', 'Nome da Empresa', 'CNPJ', 'Categoria', 'Débito', 'Crédito', 'Saldo', 'Incomum', 'Motivo da Sinalização'];
+const HEADERS = ['Data', 'Descrição', 'Nome da Empresa', 'CNPJ', 'Categoria', 'Conta Débito', 'Conta Crédito', 'Histórico Contábil', 'Débito', 'Crédito', 'Saldo', 'Incomum', 'Motivo da Sinalização'];
 
 const getRowsForExport = (data: Transaction[]): (string | number)[][] => {
-    return data.map(t => [
-        t.date,
-        t.description,
-        t.companyName,
-        t.cnpj,
-        t.category,
-        t.debit,
-        t.credit,
-        typeof t.balance === 'number' ? t.balance.toLocaleString('pt-BR', { style: 'decimal', minimumFractionDigits: 2, maximumFractionDigits: 2 }) : t.balance,
-        t.isUnusual ? 'Sim' : 'Não',
-        t.unusualReason
-    ]);
+  return data.map(t => [
+    t.date,
+    t.description,
+    t.companyName,
+    t.cnpj,
+    t.category,
+    t.accountDebit,
+    t.accountCredit,
+    t.accountingHistory,
+    t.debit,
+    t.credit,
+    typeof t.balance === 'number' ? t.balance.toLocaleString('pt-BR', { style: 'decimal', minimumFractionDigits: 2, maximumFractionDigits: 2 }) : t.balance,
+    t.isUnusual ? 'Sim' : 'Não',
+    t.unusualReason
+  ]);
 };
 
 export const exportToCSV = (data: Transaction[], filename: string) => {
@@ -81,6 +98,9 @@ export const exportToCSV = (data: Transaction[], filename: string) => {
     `"${t.companyName.replace(/"/g, '""')}"`,
     t.cnpj,
     t.category,
+    `"${t.accountDebit.replace(/"/g, '""')}"`,
+    `"${t.accountCredit.replace(/"/g, '""')}"`,
+    `"${t.accountingHistory.replace(/"/g, '""')}"`,
     t.debit,
     t.credit,
     t.balance,
@@ -102,14 +122,14 @@ export const exportToTXT = (data: Transaction[], filename: string) => {
   if (data.length === 0) return;
 
   const rows = getRowsForExport(data).map(row => row.map(cell => String(cell)));
-  
+
   const colWidths = HEADERS.map((h, i) => Math.max(h.length, ...rows.map(r => r[i].length)));
 
   let txtContent = HEADERS.map((h, i) => h.padEnd(colWidths[i])).join(' | ') + '\n';
   txtContent += colWidths.map((w) => '-'.repeat(w)).join('-|-') + '\n';
 
   rows.forEach(row => {
-      txtContent += row.map((cell, i) => cell.padEnd(colWidths[i])).join(' | ') + '\n';
+    txtContent += row.map((cell, i) => cell.padEnd(colWidths[i])).join(' | ') + '\n';
   });
 
   const blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
@@ -119,19 +139,30 @@ export const exportToTXT = (data: Transaction[], filename: string) => {
 
 export const exportToXLSX = (data: Transaction[], filename: string) => {
   if (data.length === 0) return;
+  const xlsx = getXLSX();
+  if (!xlsx) {
+    console.error("XLSX is not loaded.");
+    return;
+  }
   const rows = getRowsForExport(data);
-  const worksheet = XLSX.utils.aoa_to_sheet([HEADERS, ...rows]);
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Transações');
-  XLSX.writeFile(workbook, filename);
+  const worksheet = xlsx.utils.aoa_to_sheet([HEADERS, ...rows]);
+  const workbook = xlsx.utils.book_new();
+  xlsx.utils.book_append_sheet(workbook, worksheet, 'Transações');
+  xlsx.writeFile(workbook, filename);
 };
 
 export const exportToPDF = (data: Transaction[], companyInfo: CompanyInfo, filename: string) => {
   if (data.length === 0) return;
-  
-  const { jsPDF } = jspdf;
+
+  const jspdfModule = getJsPDF();
+  if (!jspdfModule) {
+    console.error("jsPDF is not loaded.");
+    return;
+  }
+
+  const { jsPDF } = jspdfModule;
   const doc = new jsPDF();
-  
+
   doc.setFontSize(18);
   doc.text('Relatório de Transações', 14, 22);
   doc.setFontSize(11);
@@ -143,8 +174,8 @@ export const exportToPDF = (data: Transaction[], companyInfo: CompanyInfo, filen
     return `${day}/${month}/${year}`;
   }
 
-  const infoText = 
-`Empresa: ${companyInfo.companyName}
+  const infoText =
+    `Empresa: ${companyInfo.companyName}
 CNPJ: ${formatCNPJForDisplay(companyInfo.cnpj)}
 Período: ${formatDate(companyInfo.periodStart)} a ${formatDate(companyInfo.periodEnd)}
 Banco: ${companyInfo.bankName}
@@ -153,17 +184,17 @@ Usuário: ${companyInfo.user}`;
   doc.text(infoText, 14, 32);
 
   (doc as any).autoTable({
-      head: [HEADERS],
-      body: getRowsForExport(data),
-      startY: 70,
-      theme: 'grid',
-      headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-      styles: { fontSize: 8 },
-      columnStyles: {
-        5: { halign: 'right' },
-        6: { halign: 'right' },
-        7: { halign: 'right' },
-      }
+    head: [HEADERS],
+    body: getRowsForExport(data),
+    startY: 70,
+    theme: 'grid',
+    headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+    styles: { fontSize: 8 },
+    columnStyles: {
+      8: { halign: 'right' },
+      9: { halign: 'right' },
+      10: { halign: 'right' },
+    }
   });
 
   doc.save(filename);

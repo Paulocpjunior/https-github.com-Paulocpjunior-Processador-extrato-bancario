@@ -17,14 +17,14 @@ import { ArrowDownTrayIcon, ArrowPathIcon, ExclamationTriangleIcon, PencilIcon, 
 import { Dashboard } from './components/Dashboard';
 
 const formatCurrency = (value: number | null | undefined) => {
-    if (value === null || value === undefined) return 'N/A';
-    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  if (value === null || value === undefined) return 'N/A';
+  return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 };
 
 const formatDateForDisplay = (dateString: string) => {
-    if (!dateString) return '';
-    const [year, month, day] = dateString.split('-');
-    return `${day}/${month}/${year}`;
+  if (!dateString) return '';
+  const [year, month, day] = dateString.split('-');
+  return `${day}/${month}/${year}`;
 };
 
 const initialFilters: Filters = {
@@ -57,7 +57,7 @@ export default function App() {
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const exportContainerRef = useRef<HTMLDivElement>(null);
   const [categorizingId, setCategorizingId] = useState<string | null>(null);
-  
+
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<ToastType>('success');
@@ -76,8 +76,8 @@ export default function App() {
 
   useEffect(() => {
     if (showToast) {
-        const timer = setTimeout(() => setShowToast(false), 5000); // Extended for warnings
-        return () => clearTimeout(timer);
+      const timer = setTimeout(() => setShowToast(false), 5000); // Extended for warnings
+      return () => clearTimeout(timer);
     }
   }, [showToast]);
 
@@ -85,15 +85,15 @@ export default function App() {
     let runningBalance = 0;
     const transactionsWithBalances = transactions.map(t => {
       runningBalance += (parseCurrency(t.credit) || 0) - (parseCurrency(t.debit) || 0);
-      return { 
-        ...t, 
+      return {
+        ...t,
         id: crypto.randomUUID(),
-        balance: runningBalance 
+        balance: runningBalance
       };
     });
     return { transactionsWithBalances, finalBalance: runningBalance };
   };
-  
+
   const handleInfoConfirm = (info: CompanyInfo) => {
     setCompanyInfo(info);
     setIsInfoConfirmed(true);
@@ -110,8 +110,8 @@ export default function App() {
 
     // Inicia a contagem de páginas em paralelo com o processamento
     countPdfPages(selectedFile)
-        .then(count => setPageCount(count))
-        .catch(err => console.error("Não foi possível contar as páginas:", err));
+      .then(count => setPageCount(count))
+      .catch(err => console.error("Não foi possível contar as páginas:", err));
 
     handleProcessFile(selectedFile);
   };
@@ -127,19 +127,19 @@ export default function App() {
     try {
       setLoadingMessage('Enviando para análise da IA. Isso pode levar alguns instantes...');
       const { transactions: extractedTransactions, finalBalance, accountHolderCNPJ } = await processBankStatementPDF(pdfFile);
-      
+
       setLoadingMessage('Análise concluída. Finalizando e validando dados...');
-      
+
       // CNPJ Validation against File
       if (accountHolderCNPJ && companyInfo) {
-          const fileCNPJ = accountHolderCNPJ.replace(/\D/g, '');
-          const formCNPJ = companyInfo.cnpj.replace(/\D/g, '');
-          
-          if (fileCNPJ && formCNPJ && fileCNPJ !== formCNPJ) {
-              setToastMessage(`ERRO: CNPJ do arquivo (${formatCNPJForDisplay(fileCNPJ)}) diverge do informado (${formatCNPJForDisplay(formCNPJ)}).`);
-              setToastType('error');
-              setShowToast(true);
-          }
+        const fileCNPJ = accountHolderCNPJ.replace(/\D/g, '');
+        const formCNPJ = companyInfo.cnpj.replace(/\D/g, '');
+
+        if (fileCNPJ && formCNPJ && fileCNPJ !== formCNPJ) {
+          setToastMessage(`ERRO: CNPJ do arquivo (${formatCNPJForDisplay(fileCNPJ)}) diverge do informado (${formatCNPJForDisplay(formCNPJ)}).`);
+          setToastType('error');
+          setShowToast(true);
+        }
       }
 
       const transactionsWithFormattedCurrency = extractedTransactions.map(t => {
@@ -164,43 +164,47 @@ export default function App() {
       const initialCnpjErrors: Record<string, CNPJValidationError> = {};
       const dateValidationPromises = [];
 
-      for(const t of transactionsWithBalances) {
-          // Date validation
-          const dateValidationResult = validateDate(t.date);
-          if (!dateValidationResult.isValid) {
-              const promise = suggestDateCorrection(t.date).then(suggestion => ({
-                  id: t.id,
-                  error: {
-                      message: dateValidationResult.message!,
-                      suggestion: suggestion !== t.date && validateDate(suggestion).isValid ? suggestion : undefined,
-                  }
-              }));
-              dateValidationPromises.push(promise);
-          }
-          // CNPJ validation
-          const cnpjValidationResult = validateCNPJ(t.cnpj);
-          if (!cnpjValidationResult.isValid) {
-              initialCnpjErrors[t.id] = { message: cnpjValidationResult.message! };
-          }
+      for (const t of transactionsWithBalances) {
+        // Date validation
+        const dateValidationResult = validateDate(t.date);
+        if (!dateValidationResult.isValid) {
+          const promise = suggestDateCorrection(t.date).then(suggestion => ({
+            id: t.id,
+            error: {
+              message: dateValidationResult.message!,
+              suggestion: suggestion !== t.date && validateDate(suggestion).isValid ? suggestion : undefined,
+            }
+          }));
+          dateValidationPromises.push(promise);
+        }
+        // CNPJ validation
+        const cnpjValidationResult = validateCNPJ(t.cnpj);
+        if (!cnpjValidationResult.isValid) {
+          initialCnpjErrors[t.id] = { message: cnpjValidationResult.message! };
+        }
       }
 
       const dateValidationResults = (await Promise.all(dateValidationPromises));
       dateValidationResults.forEach(result => {
-          if (result) initialDateErrors[result.id] = result.error;
+        if (result) initialDateErrors[result.id] = result.error;
       });
 
       setDateErrors(initialDateErrors);
       setCnpjErrors(initialCnpjErrors);
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || 'Falha ao processar o PDF. O arquivo pode estar corrompido ou em um formato não suportado. Por favor, tente novamente.');
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Falha ao processar o PDF. O arquivo pode estar corrompido ou em um formato não suportado. Por favor, tente novamente.');
+      }
     } finally {
       setIsLoading(false);
       setLoadingMessage('');
     }
   };
-  
+
   const { calculatedFinalBalance, balanceMismatch } = useMemo(() => {
     if (transactions.length === 0) {
       return { calculatedFinalBalance: 0, balanceMismatch: false };
@@ -213,7 +217,7 @@ export default function App() {
   const unusualTransactionsCount = useMemo(() => {
     return transactions.filter(t => t.isUnusual).length;
   }, [transactions]);
-  
+
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
       // Description filter
@@ -266,7 +270,7 @@ export default function App() {
       const updatedList = currentTransactions.map(t =>
         t.id === updatedTransaction.id ? updatedTransaction : t
       );
-      
+
       let runningBalance = 0;
       return updatedList.map(t => {
         runningBalance += (parseCurrency(t.credit) || 0) - (parseCurrency(t.debit) || 0);
@@ -277,47 +281,47 @@ export default function App() {
     const { id } = updatedTransaction;
 
     if (fieldChanged === 'date') {
-        const { date } = updatedTransaction;
-        setDateErrors(prev => { const newErrors = { ...prev }; delete newErrors[id]; return newErrors; });
+      const { date } = updatedTransaction;
+      setDateErrors(prev => { const newErrors = { ...prev }; delete newErrors[id]; return newErrors; });
 
-        const validationResult = validateDate(date);
-        if (!validationResult.isValid) {
-            const suggestion = await suggestDateCorrection(date);
-            setDateErrors(prev => ({
-                ...prev,
-                [id]: {
-                    message: validationResult.message!,
-                    suggestion: suggestion !== date && validateDate(suggestion).isValid ? suggestion : undefined,
-                }
-            }));
-        }
+      const validationResult = validateDate(date);
+      if (!validationResult.isValid) {
+        const suggestion = await suggestDateCorrection(date);
+        setDateErrors(prev => ({
+          ...prev,
+          [id]: {
+            message: validationResult.message!,
+            suggestion: suggestion !== date && validateDate(suggestion).isValid ? suggestion : undefined,
+          }
+        }));
+      }
     }
 
     if (fieldChanged === 'cnpj') {
-        const { cnpj } = updatedTransaction;
-        setCnpjErrors(prev => { const newErrors = { ...prev }; delete newErrors[id]; return newErrors; });
+      const { cnpj } = updatedTransaction;
+      setCnpjErrors(prev => { const newErrors = { ...prev }; delete newErrors[id]; return newErrors; });
 
-        const validationResult = validateCNPJ(cnpj);
-        if (!validationResult.isValid) {
-            setCnpjErrors(prev => ({
-                ...prev,
-                [id]: { message: validationResult.message! }
-            }));
-        }
+      const validationResult = validateCNPJ(cnpj);
+      if (!validationResult.isValid) {
+        setCnpjErrors(prev => ({
+          ...prev,
+          [id]: { message: validationResult.message! }
+        }));
+      }
     }
 
     if (fieldChanged === 'debit' || fieldChanged === 'credit') {
-        const value = updatedTransaction[fieldChanged] as string;
-        const errorKey = `${id}-${fieldChanged}`;
-        setCurrencyErrors(prev => { const newErrors = { ...prev }; delete newErrors[errorKey]; return newErrors; });
+      const value = updatedTransaction[fieldChanged] as string;
+      const errorKey = `${id}-${fieldChanged}`;
+      setCurrencyErrors(prev => { const newErrors = { ...prev }; delete newErrors[errorKey]; return newErrors; });
 
-        const validationResult = validateCurrency(value);
-        if(!validationResult.isValid) {
-            setCurrencyErrors(prev => ({
-                ...prev,
-                [errorKey]: { message: validationResult.message! }
-            }));
-        }
+      const validationResult = validateCurrency(value);
+      if (!validationResult.isValid) {
+        setCurrencyErrors(prev => ({
+          ...prev,
+          [errorKey]: { message: validationResult.message! }
+        }));
+      }
     }
   }, []);
 
@@ -329,19 +333,19 @@ export default function App() {
 
       switch (format) {
         case 'csv':
-            finalFilename = commonFilename('csv');
+          finalFilename = commonFilename('csv');
           exportToCSV(filteredTransactions, finalFilename);
           break;
         case 'xlsx':
-            finalFilename = commonFilename('xlsx');
+          finalFilename = commonFilename('xlsx');
           exportToXLSX(filteredTransactions, finalFilename);
           break;
         case 'txt':
-            finalFilename = commonFilename('txt');
+          finalFilename = commonFilename('txt');
           exportToTXT(filteredTransactions, finalFilename);
           break;
         case 'pdf':
-            finalFilename = commonFilename('pdf');
+          finalFilename = commonFilename('pdf');
           exportToPDF(filteredTransactions, companyInfo, finalFilename);
           break;
       }
@@ -351,7 +355,7 @@ export default function App() {
       setShowToast(true);
     }
   };
-  
+
   const handleReset = () => {
     setFile(null);
     setPageCount(null);
@@ -367,60 +371,60 @@ export default function App() {
     setFilters(initialFilters);
     setExportMenuOpen(false);
   };
-  
+
   const handleClearFilters = () => {
     setFilters(initialFilters);
   };
 
-  const handleSuggestCategory = async (transactionId: string) => {
+  const handleSuggestCategory = useCallback(async (transactionId: string) => {
     const transaction = transactions.find(t => t.id === transactionId);
     if (!transaction || categorizingId) return;
 
     setCategorizingId(transactionId);
     try {
-        const newCategory = await suggestNewCategory(transaction.description, transaction.category);
-        if (newCategory !== transaction.category) {
-            handleDataChange({ ...transaction, category: newCategory }, 'category');
-            setToastMessage(`Categoria atualizada para: ${newCategory}`);
-            setToastType('success');
-            setShowToast(true);
-        } else {
-             setToastMessage(`Categoria mantida: ${transaction.category}`);
-             setToastType('success');
-             setShowToast(true);
-        }
-    } catch (error) {
-        console.error("Falha ao sugerir categoria:", error);
-        setToastMessage("Não foi possível sugerir uma categoria neste momento.");
-        setToastType('warning');
+      const newCategory = await suggestNewCategory(transaction.description, transaction.category);
+      if (newCategory !== transaction.category) {
+        handleDataChange({ ...transaction, category: newCategory }, 'category');
+        setToastMessage(`Categoria atualizada para: ${newCategory}`);
+        setToastType('success');
         setShowToast(true);
+      } else {
+        setToastMessage(`Categoria mantida: ${transaction.category}`);
+        setToastType('success');
+        setShowToast(true);
+      }
+    } catch (error) {
+      console.error("Falha ao sugerir categoria:", error);
+      setToastMessage("Não foi possível sugerir uma categoria neste momento.");
+      setToastType('warning');
+      setShowToast(true);
     } finally {
-        setCategorizingId(null);
+      setCategorizingId(null);
+    }
+  }, [transactions, categorizingId, handleDataChange]);
+
+  const getToastStyles = () => {
+    switch (toastType) {
+      case 'error':
+        return 'bg-red-600 text-white';
+      case 'warning':
+        return 'bg-orange-500 text-white';
+      case 'success':
+      default:
+        return 'bg-green-600 text-white';
     }
   };
 
-  const getToastStyles = () => {
-      switch (toastType) {
-          case 'error':
-              return 'bg-red-600 text-white';
-          case 'warning':
-              return 'bg-orange-500 text-white';
-          case 'success':
-          default:
-              return 'bg-green-600 text-white';
-      }
-  };
-
   const ToastIcon = useMemo(() => {
-      switch (toastType) {
-          case 'error':
-              return XCircleIcon;
-          case 'warning':
-              return ExclamationTriangleIcon;
-          case 'success':
-          default:
-              return CheckCircleIcon;
-      }
+    switch (toastType) {
+      case 'error':
+        return XCircleIcon;
+      case 'warning':
+        return ExclamationTriangleIcon;
+      case 'success':
+      default:
+        return CheckCircleIcon;
+    }
   }, [toastType]);
 
   return (
@@ -429,46 +433,46 @@ export default function App() {
       <main className="container mx-auto p-4 md:p-8">
         <div className="max-w-7xl mx-auto">
 
-           {!isInfoConfirmed && !isLoading && (
+          {!isInfoConfirmed && !isLoading && (
             <HeaderForm onConfirm={handleInfoConfirm} />
           )}
-          
+
           {isInfoConfirmed && companyInfo && !isLoading && !error && (
             <div className="mb-6 p-4 bg-white dark:bg-slate-800 shadow-md rounded-lg flex justify-between items-center animate-fade-in">
-                <div>
-                    <h3 className="font-bold text-lg text-slate-900 dark:text-white">{companyInfo.companyName}</h3>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                        CNPJ: {formatCNPJForDisplay(companyInfo.cnpj)} | Banco: {companyInfo.bankName} | Usuário: {companyInfo.user} | Período: {formatDateForDisplay(companyInfo.periodStart)} a {formatDateForDisplay(companyInfo.periodEnd)}
-                    </p>
-                </div>
-                <button
-                    onClick={() => setIsInfoConfirmed(false)}
-                    aria-label="Editar Informações"
-                    className="inline-flex items-center justify-center p-2 border border-slate-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                    <PencilIcon className="h-4 w-4" />
-                </button>
+              <div>
+                <h3 className="font-bold text-lg text-slate-900 dark:text-white">{companyInfo.companyName}</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  CNPJ: {formatCNPJForDisplay(companyInfo.cnpj)} | Banco: {companyInfo.bankName} | Usuário: {companyInfo.user} | Período: {formatDateForDisplay(companyInfo.periodStart)} a {formatDateForDisplay(companyInfo.periodEnd)}
+                </p>
+              </div>
+              <button
+                onClick={() => setIsInfoConfirmed(false)}
+                aria-label="Editar Informações"
+                className="inline-flex items-center justify-center p-2 border border-slate-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                <PencilIcon className="h-4 w-4" />
+              </button>
             </div>
           )}
 
           {isInfoConfirmed && !file && !isLoading && (
             <FileUpload onFileSelect={handleFileSelect} />
           )}
-          
+
           {isLoading && (
             <Loader message={loadingMessage || 'Analisando seu documento...'} />
           )}
 
           {error && !isLoading && (
-             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative text-center" role="alert">
-                <strong className="font-bold">Ocorreu um erro!</strong>
-                <span className="block sm:inline ml-2">{error}</span>
-                <button 
-                  onClick={handleReset} 
-                  className="mt-4 sm:mt-0 sm:ml-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                >
-                  Tentar Novamente
-                </button>
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative text-center" role="alert">
+              <strong className="font-bold">Ocorreu um erro!</strong>
+              <span className="block sm:inline ml-2">{error}</span>
+              <button
+                onClick={handleReset}
+                className="mt-4 sm:mt-0 sm:ml-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+              >
+                Tentar Novamente
+              </button>
             </div>
           )}
 
@@ -482,13 +486,13 @@ export default function App() {
                 <div>
                   <h2 className="text-xl font-bold text-slate-900 dark:text-white">Transações Extraídas</h2>
                   <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-2 flex-wrap">
-                      <span>Revise e edite os dados abaixo. Arquivo:</span>
-                      <span className="font-medium text-blue-600 dark:text-blue-400">{file?.name}</span>
-                      {pageCount !== null && (
-                          <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-300">
-                              {pageCount} {pageCount === 1 ? 'página' : 'páginas'}
-                          </span>
-                      )}
+                    <span>Revise e edite os dados abaixo. Arquivo:</span>
+                    <span className="font-medium text-blue-600 dark:text-blue-400">{file?.name}</span>
+                    {pageCount !== null && (
+                      <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900 dark:text-blue-300">
+                        {pageCount} {pageCount === 1 ? 'página' : 'páginas'}
+                      </span>
+                    )}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
@@ -496,7 +500,7 @@ export default function App() {
                     onClick={handleReset}
                     className="inline-flex items-center justify-center px-4 py-2 border border-slate-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   >
-                    <ArrowPathIcon className="h-5 w-5 mr-2"/>
+                    <ArrowPathIcon className="h-5 w-5 mr-2" />
                     Processar Novo Arquivo
                   </button>
                   <div className="relative inline-block text-left" ref={exportContainerRef}>
@@ -535,42 +539,42 @@ export default function App() {
               </div>
 
               <FilterBar filters={filters} onFilterChange={setFilters} onClear={handleClearFilters} />
-              
+
               {(balanceMismatch || unusualTransactionsCount > 0) && (
                 <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800 flex flex-col gap-3">
-                    {balanceMismatch && (
-                        <div className="flex items-center">
-                            <ExclamationTriangleIcon className="h-6 w-6 text-yellow-500 mr-3 flex-shrink-0"/>
-                            <div>
-                            <h3 className="font-bold text-yellow-800 dark:text-yellow-200">Aviso de Divergência de Saldo</h3>
-                            <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                                O saldo final do extrato ({formatCurrency(statementBalance)}) não corresponde ao saldo calculado ({formatCurrency(calculatedFinalBalance)}).
-                                Por favor, revise as transações, especialmente as destacadas em amarelo que foram sinalizadas pela IA como incomuns.
-                            </p>
-                            </div>
-                        </div>
-                    )}
-                    {unusualTransactionsCount > 0 && (
-                        <div className="flex items-center">
-                            <ExclamationTriangleIcon className="h-6 w-6 text-yellow-500 mr-3 flex-shrink-0"/>
-                            <div>
-                            <h3 className="font-bold text-yellow-800 dark:text-yellow-200">Transações Incomuns Detectadas</h3>
-                            <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                                A IA sinalizou {unusualTransactionsCount} transação(ões) que podem exigir atenção especial. Elas estão destacadas na tabela.
-                            </p>
-                            </div>
-                        </div>
-                    )}
+                  {balanceMismatch && (
+                    <div className="flex items-center">
+                      <ExclamationTriangleIcon className="h-6 w-6 text-yellow-500 mr-3 flex-shrink-0" />
+                      <div>
+                        <h3 className="font-bold text-yellow-800 dark:text-yellow-200">Aviso de Divergência de Saldo</h3>
+                        <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                          O saldo final do extrato ({formatCurrency(statementBalance)}) não corresponde ao saldo calculado ({formatCurrency(calculatedFinalBalance)}).
+                          Por favor, revise as transações, especialmente as destacadas em amarelo que foram sinalizadas pela IA como incomuns.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {unusualTransactionsCount > 0 && (
+                    <div className="flex items-center">
+                      <ExclamationTriangleIcon className="h-6 w-6 text-yellow-500 mr-3 flex-shrink-0" />
+                      <div>
+                        <h3 className="font-bold text-yellow-800 dark:text-yellow-200">Transações Incomuns Detectadas</h3>
+                        <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                          A IA sinalizou {unusualTransactionsCount} transação(ões) que podem exigir atenção especial. Elas estão destacadas na tabela.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
-              
-               <div className="p-4 text-sm text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+
+              <div className="p-4 text-sm text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
                 Exibindo {filteredTransactions.length} de {transactions.length} transações.
               </div>
 
-              <DataTable 
-                transactions={filteredTransactions} 
-                onDataChange={handleDataChange} 
+              <DataTable
+                transactions={filteredTransactions}
+                onDataChange={handleDataChange}
                 dateErrors={dateErrors}
                 cnpjErrors={cnpjErrors}
                 currencyErrors={currencyErrors}
@@ -581,11 +585,11 @@ export default function App() {
           )}
         </div>
       </main>
-      
+
       {showToast && (
         <div className={`fixed bottom-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg transition-all duration-300 transform translate-y-0 opacity-100 ${getToastStyles()}`}>
-            <ToastIcon className="h-6 w-6" />
-            <span className="font-medium">{toastMessage}</span>
+          <ToastIcon className="h-6 w-6" />
+          <span className="font-medium">{toastMessage}</span>
         </div>
       )}
     </div>
