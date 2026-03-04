@@ -192,9 +192,9 @@ export default function App() {
       setDateErrors(initialDateErrors);
       setCnpjErrors(initialCnpjErrors);
 
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError('Falha ao processar o PDF. O arquivo pode estar corrompido ou em um formato não suportado. Por favor, tente novamente.');
+      setError(err.message || 'Falha ao processar o PDF. O arquivo pode estar corrompido ou em um formato não suportado. Por favor, tente novamente.');
     } finally {
       setIsLoading(false);
       setLoadingMessage('');

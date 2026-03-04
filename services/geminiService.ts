@@ -4,10 +4,10 @@ import { fileToBase64 } from "../utils/fileUtils";
 import { GeminiTransactionResponse } from "../types";
 import { TRANSACTION_CATEGORIES } from '../constants';
 
-const API_KEY = process.env.API_KEY;
+const API_KEY = process.env.GEMINI_API_KEY;
 
 if (!API_KEY) {
-    throw new Error("A variável de ambiente API_KEY não está definida.");
+    throw new Error("A variável de ambiente GEMINI_API_KEY não está definida.");
 }
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });
@@ -113,7 +113,7 @@ export const processBankStatementPDF = async (file: File): Promise<GeminiTransac
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-3.1-pro-preview',
+            model: 'gemini-2.5-flash',
             contents: { parts: [textPart, pdfPart] },
             config: {
                 responseMimeType: "application/json",
