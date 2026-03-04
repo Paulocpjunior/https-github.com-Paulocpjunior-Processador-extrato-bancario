@@ -89,15 +89,26 @@ export const processBankStatementPDF = async (file: File): Promise<GeminiTransac
     };
 
     const textPart = {
-        text: `Analise o extrato bancário em PDF. Para cada transação, extraia: data (AAAA-MM-DD), descrição, valor (como débito ou crédito), nome da empresa e CNPJ (apenas números), se disponível. Extraia também o nome do banco e o CNPJ do titular da conta (empresa dona do extrato) se identificável no cabeçalho ou rodapé. Sugira uma categoria contábil da lista fornecida. Sinalize transações incomuns (valores muito altos, descrições estranhas) com 'isUnusual' como true e uma breve justificativa. Extraia o saldo final do extrato. Se um campo como CNPJ não estiver presente, retorne uma string vazia. Preencha o JSON estritamente conforme o schema. 
-        
+        text: `Analise o extrato bancário em PDF. Para cada transação, extraia: data (AAAA-MM-DD), descrição, valor (como débito ou crédito), nome da empresa e CNPJ (apenas números), se disponível. Extraia também o nome do banco e o CNPJ do titular da conta (empresa dona do extrato) se identificável no cabeçalho ou rodapé. Sugira uma categoria contábil da lista fornecida. 
+
+        CRITÉRIOS PARA 'isUnusual' (Transações Suspeitas):
+        Sinalize com 'isUnusual': true e forneça o motivo em 'unusualReason' se:
+        1. Valor muito alto ou atípico para o contexto.
+        2. Descrição vaga ou genérica (ex: "Diversos", "Outros").
+        3. Valores redondos exatos (ex: 1000.00, 5000.00) que não parecem salários ou aluguéis.
+        4. Transações duplicadas (mesma data, descrição e valor).
+        5. Transações em horários ou dias estranhos (se a informação de hora estiver disponível).
+        6. Pagamentos para a própria empresa ou sócios sem clara justificativa.
+
         REGRA CRÍTICA PARA VALORES: 
         A classificação entre Débito e Crédito DEVE ser baseada ESTRITAMENTE na coluna em que o valor aparece no extrato original, ou no sinal do valor (negativo = débito, positivo = crédito). 
         IGNORE palavras na descrição como "pagamento", "recebimento", "transferência" se elas contradisserem a coluna do valor. 
         Por exemplo: se a descrição diz "Pagamento" mas o valor está na coluna de Crédito (ou é positivo), você DEVE classificá-lo como Crédito (recebimento).
         Débito = saídas/pagamentos (valores negativos ou na coluna de saída). 
         Crédito = entradas/recebimentos (valores positivos ou na coluna de entrada). 
-        Retorne os valores de débito e crédito sempre como números positivos absolutos. Nunca coloque o mesmo valor em débito e crédito.`,
+        Retorne os valores de débito e crédito sempre como números positivos absolutos. Nunca coloque o mesmo valor em débito e crédito.
+        
+        Extraia o saldo final do extrato. Se um campo como CNPJ não estiver presente, retorne uma string vazia. Preencha o JSON estritamente conforme o schema.`,
     };
 
     try {

@@ -14,6 +14,8 @@ import { validateCNPJ, formatCNPJForDisplay } from './utils/cnpjUtils';
 import { parseCurrency, validateCurrency } from './utils/currencyUtils';
 import { ArrowDownTrayIcon, ArrowPathIcon, ExclamationTriangleIcon, PencilIcon, ChevronDownIcon, CheckCircleIcon, XCircleIcon } from './components/icons/Icons';
 
+import { Dashboard } from './components/Dashboard';
+
 const formatCurrency = (value: number | null | undefined) => {
     if (value === null || value === undefined) return 'N/A';
     return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -468,6 +470,10 @@ export default function App() {
                   Tentar Novamente
                 </button>
             </div>
+          )}
+
+          {!isLoading && transactions.length > 0 && (
+            <Dashboard transactions={filteredTransactions} />
           )}
 
           {!isLoading && transactions.length > 0 && (
