@@ -4,9 +4,13 @@ import { fileToBase64 } from "../utils/fileUtils";
 import { GeminiTransactionResponse } from "../types";
 import { TRANSACTION_CATEGORIES } from '../constants';
 
-const API_KEY = process.env.GEMINI_API_KEY;
+const processEnvKey = typeof process !== 'undefined' ? process.env?.GEMINI_API_KEY : undefined;
+const windowEnvKey = typeof window !== 'undefined' ? (window as any).ENV?.GEMINI_API_KEY : undefined;
 
-if (!API_KEY) {
+// The key will be read from the window.ENV (injected by Docker at runtime) or from the build process
+const API_KEY = windowEnvKey !== "__GEMINI_API_KEY__" ? windowEnvKey : processEnvKey;
+
+if (!API_KEY || API_KEY === "__GEMINI_API_KEY__") {
     throw new Error("A variável de ambiente GEMINI_API_KEY não está definida.");
 }
 
