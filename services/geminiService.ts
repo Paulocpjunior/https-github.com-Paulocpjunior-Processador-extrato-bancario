@@ -133,7 +133,7 @@ export const processBankStatementPDF = async (file: File): Promise<GeminiTransac
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-1.5-flash',
+            model: 'gemini-2.0-flash',
             contents: { parts: [textPart, pdfPart] },
             config: {
                 responseMimeType: "application/json",
@@ -186,7 +186,7 @@ export const suggestDateCorrection = async (invalidDate: string): Promise<string
     if (!invalidDate.trim()) return "";
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-1.5-flash',
+            model: 'gemini-2.0-flash',
             contents: `A seguinte string de data está incorreta: "${invalidDate}". Com base em erros comuns de OCR e digitação, qual é a data correta mais provável no formato AAAA-MM-DD? Responda apenas com a data corrigida. Exemplos: "2024.05.10" -> "2024-05-10", "30/02/2024" -> "2024-02-29", "2023-13-01" -> "2023-12-01".`,
             config: {
                 temperature: 0,
