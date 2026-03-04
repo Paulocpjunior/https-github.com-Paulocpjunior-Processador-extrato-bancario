@@ -7,7 +7,6 @@ import { TRANSACTION_CATEGORIES } from '../constants';
 const processEnvKey = typeof process !== 'undefined' ? process.env?.GEMINI_API_KEY : undefined;
 const windowEnvKey = typeof window !== 'undefined' ? (window as any).ENV?.GEMINI_API_KEY : undefined;
 
-// The key will be read from the window.ENV (injected by Docker at runtime) or from the build process
 const API_KEY = windowEnvKey !== "__GEMINI_API_KEY__" ? windowEnvKey : processEnvKey;
 
 if (!API_KEY || API_KEY === "__GEMINI_API_KEY__") {
@@ -16,28 +15,115 @@ if (!API_KEY || API_KEY === "__GEMINI_API_KEY__") {
 const ai = new GoogleGenAI({ apiKey: API_KEY });
 
 /**
- * Helper to clean JSON response from LLM
+ * Deep JSON repair for truncated LLM responses.
+ * Strategy: find the last complete transaction object in the array,
+ * discard anything after it, and properly close the JSON structure.
  */
-const cleanJsonResponse = (text: string): string => {
+const repairTruncatedJson = (text: string): string => {
     let cleaned = text.trim();
+
+    // Remove markdown code blocks
     if (cleaned.startsWith('```')) {
         cleaned = cleaned.replace(/^```json\n?/, '').replace(/```$/, '').trim();
     }
 
-    // Auto-repair truncated JSON (basic check for matching brackets)
-    const openBraces = (cleaned.match(/{/g) || []).length;
-    const closeBraces = (cleaned.match(/}/g) || []).length;
-    const openBrackets = (cleaned.match(/\[/g) || []).length;
-    const closeBrackets = (cleaned.match(/\]/g) || []).length;
-
-    if (openBrackets > closeBrackets) {
-        cleaned += ']'.repeat(openBrackets - closeBrackets);
-    }
-    if (openBraces > closeBraces) {
-        cleaned += '}'.repeat(openBraces - closeBraces);
+    // First, try parsing as-is
+    try {
+        JSON.parse(cleaned);
+        return cleaned;
+    } catch {
+        // Needs repair
     }
 
-    return cleaned;
+    // Strategy: Find the last complete "}" that closes a transaction object
+    // inside the "transactions" array.
+    // We look for the pattern: },  followed by { (next transaction) or ] (end of array)
+    // If truncated, the last complete transaction ends with }
+
+    // Find the "transactions" array start
+    const txArrayMatch = cleaned.indexOf('"transactions"');
+    if (txArrayMatch === -1) {
+        // Can't find transactions key, try wrapping
+        return `{"transactions":[]}`;
+    }
+
+    // Find the opening bracket of the transactions array
+    const arrayStart = cleaned.indexOf('[', txArrayMatch);
+    if (arrayStart === -1) {
+        return `{"transactions":[]}`;
+    }
+
+    // Now find the last complete transaction object.
+    // A complete transaction ends with } and is followed by , or ]
+    // We scan backwards from the end to find the last valid closing }
+    let depth = 0;
+    let lastCompleteObjectEnd = -1;
+    let inString = false;
+    let escapeNext = false;
+
+    for (let i = arrayStart + 1; i < cleaned.length; i++) {
+        const char = cleaned[i];
+
+        if (escapeNext) {
+            escapeNext = false;
+            continue;
+        }
+
+        if (char === '\\') {
+            escapeNext = true;
+            continue;
+        }
+
+        if (char === '"') {
+            inString = !inString;
+            continue;
+        }
+
+        if (inString) continue;
+
+        if (char === '{') {
+            depth++;
+        } else if (char === '}') {
+            depth--;
+            if (depth === 0) {
+                // We just closed a complete top-level object in the array
+                lastCompleteObjectEnd = i;
+            }
+        }
+    }
+
+    if (lastCompleteObjectEnd === -1) {
+        // No complete transaction objects found
+        return `{"transactions":[]}`;
+    }
+
+    // Rebuild: take everything up to and including the last complete object,
+    // then close the array and the root object
+    let repaired = cleaned.substring(0, lastCompleteObjectEnd + 1);
+
+    // Close the transactions array
+    repaired += ']';
+
+    // Check if there were other top-level fields before "transactions"
+    // For simplicity, just close the root object
+    repaired += '}';
+
+    // Validate the repair
+    try {
+        JSON.parse(repaired);
+        return repaired;
+    } catch {
+        // If still invalid, try a more aggressive approach:
+        // extract just the array content
+        try {
+            const arrayContent = cleaned.substring(arrayStart, lastCompleteObjectEnd + 1) + ']';
+            const fallback = `{"transactions":${arrayContent}}`;
+            JSON.parse(fallback);
+            return fallback;
+        } catch {
+            return `{"transactions":[]}`;
+        }
+    }
 };
 
 const responseSchema = {
@@ -45,57 +131,57 @@ const responseSchema = {
     properties: {
         transactions: {
             type: Type.ARRAY,
-            description: "Uma lista de todas as transações financeiras encontradas no documento.",
+            description: "Lista de transações financeiras do documento.",
             items: {
                 type: Type.OBJECT,
                 properties: {
                     date: {
                         type: Type.STRING,
-                        description: 'Data da transação, formatada como AAAA-MM-DD. Inferir o ano se estiver ausente.'
+                        description: 'Data: AAAA-MM-DD. Inferir ano se ausente.'
                     },
                     description: {
                         type: Type.STRING,
-                        description: 'A descrição completa e detalhada da transação.'
+                        description: 'Descrição completa da transação.'
                     },
                     debit: {
                         type: Type.NUMBER,
-                        description: 'O valor do débito (saída de dinheiro, pagamentos, tarifas, valores negativos). Deve ser sempre um número positivo. Coloque 0 se for crédito.'
+                        description: 'Débito (saída). Positivo. 0 se crédito.'
                     },
                     credit: {
                         type: Type.NUMBER,
-                        description: 'O valor do crédito (entrada de dinheiro, recebimentos, depósitos, valores positivos). Deve ser sempre um número positivo. Coloque 0 se for débito.'
+                        description: 'Crédito (entrada). Positivo. 0 se débito.'
                     },
                     companyName: {
                         type: Type.STRING,
-                        description: 'O nome da empresa associada à transação, se houver. Caso contrário, deixe em branco.'
+                        description: 'Nome da empresa. Vazio se não houver.'
                     },
                     cnpj: {
                         type: Type.STRING,
-                        description: 'O CNPJ da empresa associada, se houver. Retorne apenas os números. Caso contrário, deixe em branco.'
+                        description: 'CNPJ (só números). Vazio se não houver.'
                     },
                     category: {
                         type: Type.STRING,
-                        description: `Sugira a categoria contábil mais apropriada para a transação. Escolha uma das seguintes opções: ${TRANSACTION_CATEGORIES.join(', ')}.`
+                        description: `Categoria: ${TRANSACTION_CATEGORIES.join(', ')}.`
                     },
                     isUnusual: {
                         type: Type.BOOLEAN,
-                        description: "Analise a transação quanto a anomalias (valor extremo, descrição suspeita) e defina como 'true' se for incomum."
+                        description: "true se transação anômala."
                     },
                     unusualReason: {
                         type: Type.STRING,
-                        description: "Se 'isUnusual' for 'true', forneça uma breve justificativa (máximo 100 caracteres). Caso contrário, deixe em branco."
+                        description: "Motivo se incomum (max 50 chars). Vazio se normal."
                     },
                     accountDebit: {
                         type: Type.STRING,
-                        description: "Sugira um número de conta contábil ou nome genérico para o Débito (ex: 'Caixa/Bancos' ou 'Fornecedores'). Se não tiver certeza, deixe em branco."
+                        description: "Conta débito (ex: 'Bancos'). Vazio se incerto."
                     },
                     accountCredit: {
                         type: Type.STRING,
-                        description: "Sugira um número de conta contábil ou nome genérico para o Crédito (ex: 'Receita de Vendas' ou 'Caixa/Bancos'). Se não tiver certeza, deixe em branco."
+                        description: "Conta crédito (ex: 'Fornecedores'). Vazio se incerto."
                     },
                     accountingHistory: {
                         type: Type.STRING,
-                        description: "Sugira um histórico padrão contábil resumido e limpo (ex: 'VLR REF PAGTO FORNECEDOR X')."
+                        description: "Histórico contábil curto (ex: 'PAGTO FORNEC X')."
                     }
                 },
                 required: ['date', 'description', 'debit', 'credit', 'companyName', 'cnpj', 'category', 'isUnusual', 'unusualReason', 'accountDebit', 'accountCredit', 'accountingHistory']
@@ -103,22 +189,29 @@ const responseSchema = {
         },
         finalBalance: {
             type: Type.NUMBER,
-            description: "O saldo final (saldo atual) declarado no extrato bancário. Se não for encontrado, omita este campo."
+            description: "Saldo final do extrato. Omitir se não encontrado."
         },
         bankName: {
             type: Type.STRING,
-            description: "O nome do banco do qual o extrato se origina (ex: Banco do Brasil, Itaú, Bradesco). Se não for encontrado, omita este campo."
+            description: "Nome do banco. Omitir se não encontrado."
         },
         accountHolderCNPJ: {
             type: Type.STRING,
-            description: "O CNPJ do titular da conta ou da empresa proprietária do extrato bancário. Retorne apenas números. Se não encontrado, omita este campo."
+            description: "CNPJ do titular (só números). Omitir se não encontrado."
         }
     },
     required: ['transactions']
 };
 
+const PROMPT_TEXT = `Analise o extrato bancário em PDF. Extraia TODAS as transações com: data (AAAA-MM-DD), descrição, débito ou crédito, empresa, CNPJ. Extraia banco e CNPJ do titular.
 
-export const processBankStatementPDF = async (file: File): Promise<GeminiTransactionResponse> => {
+VALORES: Débito=saída (negativo/coluna saída), Crédito=entrada (positivo/coluna entrada). Sempre números positivos absolutos.
+CONTABILIDADE: Infira accountDebit, accountCredit e accountingHistory em CAIXA ALTA. Use nomes genéricos (Bancos, Fornecedores).
+ANOMALIAS: isUnusual=true se valor extremo, descrição vaga, duplicada ou suspeita.
+CONCISÃO: Campos inexistentes = "". Descrições curtas. Motivos de anomalia máx 50 chars.`;
+
+
+export const processBankStatementPDF = async (file: File, maxRetries = 2): Promise<GeminiTransactionResponse> => {
     const base64pdf = await fileToBase64(file);
 
     const pdfPart = {
@@ -128,86 +221,87 @@ export const processBankStatementPDF = async (file: File): Promise<GeminiTransac
         },
     };
 
-    const textPart = {
-        text: `Analise o extrato bancário em PDF. Para cada transação, extraia: data (AAAA-MM-DD), descrição, valor (como débito ou crédito), nome da empresa e CNPJ (apenas números), se disponível. Extraia também o nome do banco e o CNPJ do titular da conta (empresa dona do extrato) se identificável no cabeçalho ou rodapé. Sugira uma categoria contábil da lista fornecida. 
+    const textPart = { text: PROMPT_TEXT };
 
-        CRITÉRIOS PARA 'isUnusual' (Transações Suspeitas):
-        Sinalize com 'isUnusual': true e forneça o motivo em 'unusualReason' se:
-        1. Valor muito alto ou atípico para o contexto.
-        2. Descrição vaga ou genérica (ex: "Diversos", "Outros").
-        3. Valores redondos exatos (ex: 1000.00, 5000.00) que não parecem salários ou aluguéis.
-        4. Transações duplicadas (mesma data, descrição e valor).
-        5. Transações em horários ou dias estranhos (se a informação de hora estiver disponível).
-        6. Pagamentos para a própria empresa ou sócios sem clara justificativa.
+    let lastError: Error | null = null;
 
-        REGRA CRÍTICA PARA VALORES: 
-        A classificação entre Débito e Crédito DEVE ser baseada ESTRITAMENTE na coluna em que o valor aparece no extrato original, ou no sinal do valor (negativo = débito, positivo = crédito). 
-        IGNORE palavras na descrição como "pagamento", "recebimento", "transferência" se elas contradisserem a coluna do valor. 
-        Débito = saídas/pagamentos (negativo ou coluna de saída). Crédito = entradas/recebimentos (positivo ou coluna de entrada). Retorne valores como números positivos absolutos.
-        
-        CONTABILIDADE:
-        Sempre infira 'accountDebit', 'accountCredit' e 'accountingHistory'. Use CAIXA ALTA e nomes genéricos de plano de contas (ex: "Bancos", "Fornecedores") se não souber o código.
-        
-        REGRAS FINAIS:
-        Seja conciso. Se um campo for inexistente, retorne "". Preencha o JSON estritamente conforme o schema.`,
-    };
-
-    try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash',
-            contents: { parts: [textPart, pdfPart] },
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: responseSchema,
-                temperature: 0.1,
-                maxOutputTokens: 8192,
-            },
-        });
-
-        const jsonText = cleanJsonResponse(response.text);
-        let parsedResponse: GeminiTransactionResponse;
-
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-            parsedResponse = JSON.parse(jsonText);
-        } catch (parseError) {
-            console.error("Failed to parse Gemini JSON:", jsonText);
-            throw new Error(`Erro na resposta da IA: O formato dos dados retornados está incompleto (JSON Parse error). Isso geralmente acontece com documentos muito longos. Tente processar o documento novamente ou em partes menores.`);
-        }
-
-        if (!parsedResponse.transactions || !Array.isArray(parsedResponse.transactions)) {
-            throw new Error("Estrutura JSON inválida recebida da API.");
-        }
-
-        // Ensure new fields are present
-        parsedResponse.transactions = parsedResponse.transactions.map(t => ({
-            ...t,
-            companyName: t.companyName || '',
-            cnpj: t.cnpj || '',
-            category: t.category || 'Não categorizado',
-            isUnusual: t.isUnusual || false,
-            unusualReason: t.unusualReason || '',
-            accountDebit: t.accountDebit || '',
-            accountCredit: t.accountCredit || '',
-            accountingHistory: t.accountingHistory || '',
-        }));
-
-        return parsedResponse;
-
-    } catch (error: unknown) {
-        console.error("Error processing PDF with Gemini API:", error);
-
-        // Log more details if it's an API error
-        if (error instanceof Error) {
-            console.error("API Message:", error.message);
-            const apiError = error as any;
-            if (apiError.status) {
-                console.error("API Status:", apiError.status);
+            if (attempt > 0) {
+                console.log(`Retry attempt ${attempt}/${maxRetries}...`);
+                // Small delay before retry
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
             }
-            throw new Error(`O modelo de IA não conseguiu processar este documento. Detalhe do erro: ${error.message}. Verifique se é um extrato bancário válido.`);
-        }
 
-        throw new Error("O modelo de IA não conseguiu processar este documento. O arquivo pode estar corrompido ou em um formato não suportado.");
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.0-flash',
+                contents: { parts: [textPart, pdfPart] },
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: responseSchema,
+                    temperature: 0.1,
+                    maxOutputTokens: 65536,
+                },
+            });
+
+            const rawText = response.text;
+            if (!rawText || rawText.trim().length === 0) {
+                throw new Error("A IA retornou uma resposta vazia. Tente novamente.");
+            }
+
+            // Use the deep repair function
+            const jsonText = repairTruncatedJson(rawText);
+            let parsedResponse: GeminiTransactionResponse;
+
+            try {
+                parsedResponse = JSON.parse(jsonText);
+            } catch (parseError) {
+                console.error("Failed to parse even after repair. Raw text length:", rawText.length);
+                console.error("Raw text (first 500 chars):", rawText.substring(0, 500));
+                console.error("Raw text (last 500 chars):", rawText.substring(rawText.length - 500));
+                throw new Error(`JSON Parse error após reparo. Tamanho da resposta: ${rawText.length} chars.`);
+            }
+
+            if (!parsedResponse.transactions || !Array.isArray(parsedResponse.transactions)) {
+                throw new Error("Estrutura JSON inválida recebida da API.");
+            }
+
+            // Ensure all fields are present
+            parsedResponse.transactions = parsedResponse.transactions.map(t => ({
+                ...t,
+                companyName: t.companyName || '',
+                cnpj: t.cnpj || '',
+                category: t.category || 'Não categorizado',
+                isUnusual: t.isUnusual || false,
+                unusualReason: t.unusualReason || '',
+                accountDebit: t.accountDebit || '',
+                accountCredit: t.accountCredit || '',
+                accountingHistory: t.accountingHistory || '',
+            }));
+
+            // Log if repair was needed (transactions might be partial)
+            if (rawText !== jsonText) {
+                console.warn(`JSON was repaired. Found ${parsedResponse.transactions.length} complete transactions.`);
+            }
+
+            return parsedResponse;
+
+        } catch (error: unknown) {
+            console.error(`Attempt ${attempt + 1} failed:`, error);
+            if (error instanceof Error) {
+                lastError = error;
+            } else {
+                lastError = new Error("Erro desconhecido ao processar o documento.");
+            }
+        }
     }
+
+    // All retries failed
+    console.error("All attempts failed. Last error:", lastError);
+    if (lastError) {
+        throw new Error(`O modelo de IA não conseguiu processar este documento após ${maxRetries + 1} tentativas. Detalhe: ${lastError.message}. Verifique se é um extrato bancário válido.`);
+    }
+    throw new Error("O modelo de IA não conseguiu processar este documento. O arquivo pode estar corrompido ou em um formato não suportado.");
 };
 
 
@@ -216,7 +310,7 @@ export const suggestDateCorrection = async (invalidDate: string): Promise<string
     try {
         const response = await ai.models.generateContent({
             model: 'gemini-2.0-flash',
-            contents: `A seguinte string de data está incorreta: "${invalidDate}". Com base em erros comuns de OCR e digitação, qual é a data correta mais provável no formato AAAA-MM-DD? Responda apenas com a data corrigida. Exemplos: "2024.05.10" -> "2024-05-10", "30/02/2024" -> "2024-02-29", "2023-13-01" -> "2023-12-01".`,
+            contents: `Data incorreta: "${invalidDate}". Corrija para AAAA-MM-DD. Responda só a data.`,
             config: {
                 temperature: 0,
                 stopSequences: ['\n'],
@@ -226,7 +320,7 @@ export const suggestDateCorrection = async (invalidDate: string): Promise<string
         return response.text.trim();
     } catch (error) {
         console.error("Erro ao sugerir correção de data:", error);
-        return invalidDate; // Retorna o original em caso de falha
+        return invalidDate;
     }
 };
 
@@ -235,7 +329,7 @@ export const suggestNewCategory = async (description: string, currentCategory: s
     try {
         const response = await ai.models.generateContent({
             model: 'gemini-2.0-flash',
-            contents: `Dada a descrição da transação: "${description}" e a categoria atual: "${currentCategory}", sugira a categoria mais apropriada da seguinte lista: [${TRANSACTION_CATEGORIES.join(', ')}]. Responda apenas com o nome da categoria. Se a categoria atual já for a melhor, retorne-a.`,
+            contents: `Transação: "${description}". Categoria atual: "${currentCategory}". Sugira a melhor de: [${TRANSACTION_CATEGORIES.join(', ')}]. Responda só o nome.`,
             config: {
                 temperature: 0.1,
                 stopSequences: ['\n'],
@@ -243,14 +337,13 @@ export const suggestNewCategory = async (description: string, currentCategory: s
         });
 
         const suggestedCategory = response.text.trim();
-        // Simple validation to ensure the returned category is one of the allowed ones
         if (TRANSACTION_CATEGORIES.includes(suggestedCategory)) {
             return suggestedCategory;
         }
-        return currentCategory; // Return original if suggestion is invalid
+        return currentCategory;
 
     } catch (error) {
         console.error("Erro ao sugerir nova categoria:", error);
-        return currentCategory; // Retorna a original em caso de falha
+        return currentCategory;
     }
 };
