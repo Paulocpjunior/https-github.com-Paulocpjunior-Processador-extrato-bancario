@@ -1,5 +1,5 @@
 
-import { Transaction, CompanyInfo } from '../types';
+import { Transaction, InvestmentTransaction, CompanyInfo } from '../types';
 import { formatCNPJForDisplay } from './cnpjUtils';
 
 declare global {
@@ -70,6 +70,7 @@ const downloadBlob = (blob: Blob, filename: string) => {
 };
 
 const HEADERS = ['Data', 'Descrição', 'Nome da Empresa', 'CNPJ', 'Categoria', 'Conta Débito', 'Conta Crédito', 'Histórico Contábil', 'Débito', 'Crédito', 'Saldo', 'Incomum', 'Motivo da Sinalização'];
+const INVESTMENT_HEADERS = ['Data', 'Fundo de Investimento', 'CNPJ do Fundo', 'Operação', 'Qtd Cotas', 'Vlr Cota', 'Valor Bruto', 'IR Retido', 'Valor Líquido', 'Administrador', 'Gestor', 'Incomum', 'Motivo da Sinalização'];
 
 const getRowsForExport = (data: Transaction[]): (string | number)[][] => {
   return data.map(t => [
@@ -89,43 +90,61 @@ const getRowsForExport = (data: Transaction[]): (string | number)[][] => {
   ]);
 };
 
-export const exportToCSV = (data: Transaction[], filename: string) => {
+const getInvestmentRowsForExport = (data: InvestmentTransaction[]): (string | number)[][] => {
+  const fmt = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtCotas = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 6, maximumFractionDigits: 6 });
+
+  return data.map(t => [
+    t.date,
+    t.fundName,
+    t.fundCNPJ,
+    t.operationType,
+    fmtCotas(t.shareQuantity),
+    fmt(t.shareValue),
+    fmt(t.grossValue),
+    fmt(t.irWithheld),
+    fmt(t.netValue),
+    t.administrator,
+    t.gestor,
+    t.isUnusual ? 'Sim' : 'Não',
+    t.unusualReason
+  ]);
+};
+
+export const exportToCSV = (data: (Transaction | InvestmentTransaction)[], filename: string, isInvestment = false) => {
   if (data.length === 0) return;
 
-  const rows = data.map(t => [
-    t.date,
-    `"${t.description.replace(/"/g, '""')}"`,
-    `"${t.companyName.replace(/"/g, '""')}"`,
-    t.cnpj,
-    t.category,
-    `"${t.accountDebit.replace(/"/g, '""')}"`,
-    `"${t.accountCredit.replace(/"/g, '""')}"`,
-    `"${t.accountingHistory.replace(/"/g, '""')}"`,
-    t.debit,
-    t.credit,
-    t.balance,
-    t.isUnusual ? 'Sim' : 'Não',
-    `"${t.unusualReason.replace(/"/g, '""')}"`
-  ]);
+  const headers = isInvestment ? INVESTMENT_HEADERS : HEADERS;
+  const rows = isInvestment
+    ? getInvestmentRowsForExport(data as InvestmentTransaction[])
+    : getRowsForExport(data as Transaction[]);
 
   const csvContent = [
-    HEADERS.join(','),
-    ...rows.map(row => row.join(','))
+    headers.join(','),
+    ...rows.map(row => row.map(cell => {
+      const val = String(cell);
+      return val.includes(',') || val.includes('"') || val.includes('\n')
+        ? `"${val.replace(/"/g, '""')}"`
+        : val;
+    }).join(','))
   ].join('\n');
 
-  const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' }); // Add BOM for Excel compatibility
+  const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
   downloadBlob(blob, filename);
 };
 
 
-export const exportToTXT = (data: Transaction[], filename: string) => {
+export const exportToTXT = (data: (Transaction | InvestmentTransaction)[], filename: string, isInvestment = false) => {
   if (data.length === 0) return;
 
-  const rows = getRowsForExport(data).map(row => row.map(cell => String(cell)));
+  const headers = isInvestment ? INVESTMENT_HEADERS : HEADERS;
+  const rows = isInvestment
+    ? getInvestmentRowsForExport(data as InvestmentTransaction[]).map(r => r.map(c => String(c)))
+    : getRowsForExport(data as Transaction[]).map(r => r.map(c => String(c)));
 
-  const colWidths = HEADERS.map((h, i) => Math.max(h.length, ...rows.map(r => r[i].length)));
+  const colWidths = headers.map((h, i) => Math.max(h.length, ...rows.map(r => r[i].length)));
 
-  let txtContent = HEADERS.map((h, i) => h.padEnd(colWidths[i])).join(' | ') + '\n';
+  let txtContent = headers.map((h, i) => h.padEnd(colWidths[i])).join(' | ') + '\n';
   txtContent += colWidths.map((w) => '-'.repeat(w)).join('-|-') + '\n';
 
   rows.forEach(row => {
@@ -137,21 +156,26 @@ export const exportToTXT = (data: Transaction[], filename: string) => {
 };
 
 
-export const exportToXLSX = (data: Transaction[], filename: string) => {
+export const exportToXLSX = (data: (Transaction | InvestmentTransaction)[], filename: string, isInvestment = false) => {
   if (data.length === 0) return;
   const xlsx = getXLSX();
   if (!xlsx) {
     console.error("XLSX is not loaded.");
     return;
   }
-  const rows = getRowsForExport(data);
-  const worksheet = xlsx.utils.aoa_to_sheet([HEADERS, ...rows]);
+
+  const headers = isInvestment ? INVESTMENT_HEADERS : HEADERS;
+  const rows = isInvestment
+    ? getInvestmentRowsForExport(data as InvestmentTransaction[])
+    : getRowsForExport(data as Transaction[]);
+
+  const worksheet = xlsx.utils.aoa_to_sheet([headers, ...rows]);
   const workbook = xlsx.utils.book_new();
-  xlsx.utils.book_append_sheet(workbook, worksheet, 'Transações');
+  xlsx.utils.book_append_sheet(workbook, worksheet, isInvestment ? 'Investimentos' : 'Transações');
   xlsx.writeFile(workbook, filename);
 };
 
-export const exportToPDF = (data: Transaction[], companyInfo: CompanyInfo, filename: string) => {
+export const exportToPDF = (data: (Transaction | InvestmentTransaction)[], companyInfo: CompanyInfo, filename: string, isInvestment = false) => {
   if (data.length === 0) return;
 
   const jspdfModule = getJsPDF();
@@ -161,10 +185,10 @@ export const exportToPDF = (data: Transaction[], companyInfo: CompanyInfo, filen
   }
 
   const { jsPDF } = jspdfModule;
-  const doc = new jsPDF();
+  const doc = new jsPDF(isInvestment ? 'l' : 'p'); // Landscape for investment as it has many columns
 
   doc.setFontSize(18);
-  doc.text('Relatório de Transações', 14, 22);
+  doc.text(isInvestment ? 'Relatório de Investimentos' : 'Relatório de Transações', 14, 22);
   doc.setFontSize(11);
   doc.setTextColor(100);
 
@@ -178,19 +202,30 @@ export const exportToPDF = (data: Transaction[], companyInfo: CompanyInfo, filen
     `Empresa: ${companyInfo.companyName}
 CNPJ: ${formatCNPJForDisplay(companyInfo.cnpj)}
 Período: ${formatDate(companyInfo.periodStart)} a ${formatDate(companyInfo.periodEnd)}
-Banco: ${companyInfo.bankName}
+Corretora/Banco: ${companyInfo.bankName}
 Usuário: ${companyInfo.user}`;
 
   doc.text(infoText, 14, 32);
 
+  const headers = isInvestment ? INVESTMENT_HEADERS : HEADERS;
+  const rows = isInvestment
+    ? getInvestmentRowsForExport(data as InvestmentTransaction[])
+    : getRowsForExport(data as Transaction[]);
+
   (doc as any).autoTable({
-    head: [HEADERS],
-    body: getRowsForExport(data),
+    head: [headers],
+    body: rows,
     startY: 70,
     theme: 'grid',
-    headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-    styles: { fontSize: 8 },
-    columnStyles: {
+    headStyles: { fillColor: isInvestment ? [39, 174, 96] : [41, 128, 185], textColor: 255 },
+    styles: { fontSize: isInvestment ? 7 : 8 },
+    columnStyles: isInvestment ? {
+      4: { halign: 'right' },
+      5: { halign: 'right' },
+      6: { halign: 'right' },
+      7: { halign: 'right' },
+      8: { halign: 'right' },
+    } : {
       8: { halign: 'right' },
       9: { halign: 'right' },
       10: { halign: 'right' },

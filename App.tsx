@@ -375,34 +375,46 @@ export default function App() {
   }, []);
 
   const handleExport = (format: 'csv' | 'xlsx' | 'txt' | 'pdf') => {
-    if (file && companyInfo) {
-      const filenameBase = `${companyInfo.companyName.replace(/\s/g, '_')}_${file.name.replace('.pdf', '')}_exportado`;
-      const commonFilename = (ext: string) => `${filenameBase}.${ext}`;
-      let finalFilename = '';
+    if (!companyInfo) return;
 
+    const isInvestment = documentType === 'investment';
+    const dataToExport = isInvestment ? investmentTransactions : transactions;
+
+    if (dataToExport.length === 0) {
+      setToastMessage("Nenhum dado para exportar.");
+      setToastType('warning');
+      setShowToast(true);
+      return;
+    }
+
+    const prefix = isInvestment ? 'extrato_investimento' : 'extrato_bancario';
+    const filename = `${prefix}_${companyInfo.companyName.replace(/\s/g, '_')}_${new Date().toISOString().split('T')[0]}.${format}`;
+
+    try {
       switch (format) {
         case 'csv':
-          finalFilename = commonFilename('csv');
-          exportToCSV(filteredTransactions, finalFilename);
+          exportToCSV(dataToExport, filename, isInvestment);
           break;
         case 'xlsx':
-          finalFilename = commonFilename('xlsx');
-          exportToXLSX(filteredTransactions, finalFilename);
+          exportToXLSX(dataToExport, filename, isInvestment);
           break;
         case 'txt':
-          finalFilename = commonFilename('txt');
-          exportToTXT(filteredTransactions, finalFilename);
+          exportToTXT(dataToExport, filename, isInvestment);
           break;
         case 'pdf':
-          finalFilename = commonFilename('pdf');
-          exportToPDF(filteredTransactions, companyInfo, finalFilename);
+          exportToPDF(dataToExport, companyInfo, filename, isInvestment);
           break;
       }
-      setExportMenuOpen(false);
-      setToastMessage(`Arquivo ${finalFilename} exportado com sucesso!`);
+      setToastMessage(`Arquivo ${filename} exportado com sucesso!`);
       setToastType('success');
       setShowToast(true);
+    } catch (error) {
+      console.error("Erro na exportação:", error);
+      setToastMessage("Ocorreu um erro ao exportar o arquivo.");
+      setToastType('error');
+      setShowToast(true);
     }
+    setExportMenuOpen(false);
   };
 
   const handleReset = () => {
@@ -705,8 +717,8 @@ export default function App() {
                           </p>
                           <div className="flex items-center gap-3 text-xs">
                             <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full ${investmentMeta.isExtractionComplete
-                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                                : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 font-bold'
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                              : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 font-bold'
                               }`}>
                               {investmentMeta.isExtractionComplete ? <CheckCircleIcon className="h-3.5 w-3.5" /> : <ExclamationTriangleIcon className="h-3.5 w-3.5" />}
                               {investmentMeta.isExtractionComplete ? 'Extração Completa' : 'Extração Incompleta / Revisão Necessária'}
@@ -720,13 +732,47 @@ export default function App() {
                         </div>
                       )}
                     </div>
-                    <button
-                      onClick={handleReset}
-                      className="inline-flex items-center justify-center px-4 py-2 border border-slate-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    >
-                      <ArrowPathIcon className="h-5 w-5 mr-2" />
-                      Processar Novo Arquivo
-                    </button>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        onClick={handleReset}
+                        className="inline-flex items-center justify-center px-4 py-2 border border-slate-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                      >
+                        <ArrowPathIcon className="h-5 w-5 mr-2" />
+                        Processar Novo Arquivo
+                      </button>
+                      <div className="relative inline-block text-left" ref={exportContainerRef}>
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => setExportMenuOpen(!exportMenuOpen)}
+                            className="inline-flex w-full justify-center items-center gap-x-1.5 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-100 dark:focus:ring-offset-slate-800 focus:ring-emerald-500"
+                            id="menu-button-inv"
+                            aria-expanded={exportMenuOpen}
+                            aria-haspopup="true"
+                          >
+                            <ArrowDownTrayIcon className="h-5 w-5 -ml-1 mr-2" />
+                            Exportar
+                            <ChevronDownIcon className="-mr-1 h-5 w-5 text-emerald-200" aria-hidden="true" />
+                          </button>
+                        </div>
+
+                        {exportMenuOpen && (
+                          <div
+                            className="absolute right-0 z-10 mt-2 w-56 origin-top-right rounded-md bg-white dark:bg-slate-700 shadow-lg ring-1 ring-black dark:ring-slate-600 ring-opacity-5 focus:outline-none"
+                            role="menu"
+                            aria-orientation="vertical"
+                            aria-labelledby="menu-button-inv"
+                          >
+                            <div className="py-1" role="none">
+                              <a href="#" onClick={(e) => { e.preventDefault(); handleExport('csv'); }} className="text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600 block px-4 py-2 text-sm" role="menuitem">Exportar como CSV</a>
+                              <a href="#" onClick={(e) => { e.preventDefault(); handleExport('xlsx'); }} className="text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600 block px-4 py-2 text-sm" role="menuitem">Exportar como XLSX</a>
+                              <a href="#" onClick={(e) => { e.preventDefault(); handleExport('txt'); }} className="text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600 block px-4 py-2 text-sm" role="menuitem">Exportar como TXT</a>
+                              <a href="#" onClick={(e) => { e.preventDefault(); handleExport('pdf'); }} className="text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-600 block px-4 py-2 text-sm" role="menuitem">Exportar como PDF</a>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   {/* Cards de resumo */}

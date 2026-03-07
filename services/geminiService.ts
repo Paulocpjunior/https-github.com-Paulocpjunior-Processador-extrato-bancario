@@ -471,7 +471,7 @@ const investmentResponseSchema = {
 
 const INVESTMENT_PROMPT_TEXT = `Você está analisando um PDF de "Extrato de Cotista" de fundos de investimento da XP Investimentos (ou similar).
 
-OBJETIVO: Extrair TODAS as movimentações em fundos de investimento listadas no documento.
+OBJETIVO: Extrair TODAS as movimentações em fundos de investimento listadas no documento, sem exceção.
 
 INSTRUÇÕES DE EXTRAÇÃO:
 1. Para cada movimentação extraia:
@@ -506,12 +506,11 @@ INSTRUÇÕES DE EXTRAÇÃO:
    - Come-cotas com valor zerado (suspeito)
    - Data fora do período do extrato
 
-6. **NÃO OMITA NADA**: Você deve ler TODAS as páginas do PDF do início ao fim. Se houver 10 páginas, extraia todas as transações das 10 páginas.
-7. **Verificação de Páginas**: Procure por indicadores de página (ex: "Página 1 de 5"). Reporte o total de páginas no campo "totalPagesInDocument" e marque "isExtractionComplete" como true apenas se tiver certeza de que processou do início ao fim.
-8. **Dados do Cotista e Período**: Extraia o nome e CNPJ do cotista e o período início/fim do extrato (geralmente no cabeçalho).
-9. **Anomalias**: Se uma linha estiver truncada ou ilegível, marque "isUnusual: true" e descreva o motivo.
+6. **EQUIPE DE DADOS - REGRA CRÍTICA**: Você deve ler TODAS as páginas. Se o documento tiver 20 páginas e centenas de transações, você DEVE extrair TODAS elas. NÃO resuma, NÃO use "..." e NÃO pule linhas. A integridade contábil depende da extração total.
+7. **Verificação de Páginas**: Procure por indicadores de página (ex: "Página 1 de 5"). Reporte o total de páginas no campo "totalPagesInDocument" e a última página lida em "pagesProcessed". Marque "isExtractionComplete" como true apenas se chegar ao fim do documento.
+8. **Anomalias**: Se uma linha estiver truncada ou ilegível, marque "isUnusual: true" e descreva o motivo.
 
-ATENÇÃO: Extraia TODAS as linhas de movimentação. Não pule nenhuma. Valores numéricos sempre positivos.`;
+ATENÇÃO: A saída deve ser um JSON válido. Se o limite de tokens for atingido, termine o último objeto da lista e feche o JSON corretamente. Extraia o máximo possível, priorizando a ordem cronológica do extrato.`;
 
 export const processInvestmentStatementPDF = async (file: File, maxRetries = 2): Promise<GeminiInvestmentResponse> => {
     const base64pdf = await fileToBase64(file);
@@ -615,10 +614,10 @@ const repairTruncatedJsonInvestment = (text: string): string => {
     } catch { /* needs repair */ }
 
     const txArrayMatch = cleaned.indexOf('"investmentTransactions"');
-    if (txArrayMatch === -1) return '{"investmentTransactions":[]}';
+    if (txArrayMatch === -1) return '{"investmentTransactions":[], "isExtractionComplete": false, "extractionNotes": "Erro: Campo investmentTransactions não encontrado."}';
 
     const arrayStart = cleaned.indexOf('[', txArrayMatch);
-    if (arrayStart === -1) return '{"investmentTransactions":[]}';
+    if (arrayStart === -1) return '{"investmentTransactions":[], "isExtractionComplete": false, "extractionNotes": "Erro: Início de array não encontrado."}';
 
     let depth = 0, lastCompleteObjectEnd = -1, inString = false, escapeNext = false;
     for (let i = arrayStart + 1; i < cleaned.length; i++) {
@@ -628,17 +627,16 @@ const repairTruncatedJsonInvestment = (text: string): string => {
         if (char === '"') { inString = !inString; continue; }
         if (inString) continue;
         if (char === '{') depth++;
-        else if (char === '}') { depth--; if (depth === 0) lastCompleteObjectEnd = i; }
+        else if (char === '}') {
+            depth--;
+            if (depth === 0) lastCompleteObjectEnd = i;
+        }
     }
 
-    if (lastCompleteObjectEnd === -1) return '{"investmentTransactions":[]}';
+    if (lastCompleteObjectEnd !== -1) {
+        // Encerra o array e o objeto raiz com metadados de erro
+        return cleaned.substring(0, lastCompleteObjectEnd + 1) + '], "isExtractionComplete": false, "extractionNotes": "Resposta truncada pela IA. Dados parciais recuperados."}';
+    }
 
-    let repaired = cleaned.substring(0, lastCompleteObjectEnd + 1) + ']}';
-    try { JSON.parse(repaired); return repaired; } catch { /* try fallback */ }
-
-    try {
-        const fallback = `{"investmentTransactions":${cleaned.substring(arrayStart, lastCompleteObjectEnd + 1)}]}`;
-        JSON.parse(fallback);
-        return fallback;
-    } catch { return '{"investmentTransactions":[]}'; }
+    return '{"investmentTransactions":[], "isExtractionComplete": false, "extractionNotes": "Erro crítico no formato da resposta truncada."}';
 };
