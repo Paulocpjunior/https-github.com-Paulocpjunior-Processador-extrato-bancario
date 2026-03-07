@@ -1,4 +1,6 @@
 
+export type DocumentType = 'bank' | 'investment';
+
 export interface Transaction {
     id: string;
     date: string;
@@ -22,6 +24,45 @@ export interface GeminiTransactionResponse {
     bankName?: string;
     accountHolderCNPJ?: string;
 }
+
+// ─── Extrato de Cotista (Fundos de Investimento) ───────────────────────────
+
+export type InvestmentOperationType =
+    | 'Aplicação'
+    | 'Resgate'
+    | 'Rendimento'
+    | 'Come-cotas'
+    | 'Amortização'
+    | 'Transferência'
+    | 'Outro';
+
+export interface InvestmentTransaction {
+    id: string;
+    date: string;
+    fundName: string;          // Nome do fundo
+    fundCNPJ: string;          // CNPJ do fundo (só números)
+    operationType: InvestmentOperationType;
+    shareQuantity: number;     // Quantidade de cotas
+    shareValue: number;        // Valor unitário da cota
+    grossValue: number;        // Valor bruto da operação
+    irWithheld: number;        // IR retido na fonte
+    netValue: number;          // Valor líquido (grossValue - irWithheld)
+    administrator: string;     // Administrador do fundo
+    gestor: string;            // Gestor do fundo
+    isUnusual: boolean;
+    unusualReason: string;
+}
+
+export interface GeminiInvestmentResponse {
+    investmentTransactions: Omit<InvestmentTransaction, 'id'>[];
+    cotistaNome?: string;      // Nome do cotista
+    cotistaCNPJ?: string;      // CNPJ do cotista (só números)
+    bankName?: string;         // Corretora/banco
+    periodStart?: string;      // Início do período (AAAA-MM-DD)
+    periodEnd?: string;        // Fim do período (AAAA-MM-DD)
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 
 export interface DateValidationError {
     message: string;
@@ -54,4 +95,13 @@ export interface Filters {
     category: string;
     showUnusual: 'all' | 'unusualOnly' | 'commonOnly';
     transactionType: 'all' | 'debit' | 'credit';
+}
+
+export interface InvestmentFilters {
+    fundName: string;
+    startDate: string;
+    endDate: string;
+    operationType: string;
+    minAmount: string;
+    maxAmount: string;
 }

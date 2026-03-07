@@ -2,17 +2,19 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { DataTable } from './components/DataTable';
+import { InvestmentTable } from './components/InvestmentTable';
 import { Header } from './components/Header';
 import { Loader } from './components/Loader';
 import { HeaderForm } from './components/HeaderForm';
 import { FilterBar } from './components/FilterBar';
-import { Transaction, DateValidationError, CNPJValidationError, CurrencyValidationError, CompanyInfo, Filters } from './types';
-import { processBankStatementPDF, suggestDateCorrection, suggestNewCategory } from './services/geminiService';
+import { Transaction, InvestmentTransaction, DateValidationError, CNPJValidationError, CurrencyValidationError, CompanyInfo, Filters, DocumentType } from './types';
+import { processBankStatementPDF, processInvestmentStatementPDF, suggestDateCorrection, suggestNewCategory } from './services/geminiService';
 import { exportToCSV, exportToXLSX, exportToTXT, exportToPDF, countPdfPages } from './utils/fileUtils';
 import { validateDate } from './utils/dateUtils';
 import { validateCNPJ, formatCNPJForDisplay } from './utils/cnpjUtils';
 import { parseCurrency, validateCurrency } from './utils/currencyUtils';
 import { ArrowDownTrayIcon, ArrowPathIcon, ExclamationTriangleIcon, PencilIcon, ChevronDownIcon, CheckCircleIcon, XCircleIcon } from './components/icons/Icons';
+import { INVESTMENT_OPERATION_TYPES } from './constants';
 
 import { Dashboard } from './components/Dashboard';
 
@@ -43,9 +45,12 @@ type ToastType = 'success' | 'warning' | 'error';
 export default function App() {
   const [companyInfo, setCompanyInfo] = useState<CompanyInfo | null>(null);
   const [isInfoConfirmed, setIsInfoConfirmed] = useState<boolean>(false);
+  const [documentType, setDocumentType] = useState<DocumentType>('bank');
   const [file, setFile] = useState<File | null>(null);
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [investmentTransactions, setInvestmentTransactions] = useState<InvestmentTransaction[]>([]);
+  const [investmentMeta, setInvestmentMeta] = useState<{ cotistaNome?: string; cotistaCNPJ?: string; bankName?: string; periodStart?: string; periodEnd?: string } | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +59,7 @@ export default function App() {
   const [cnpjErrors, setCnpjErrors] = useState<Record<string, CNPJValidationError>>({});
   const [currencyErrors, setCurrencyErrors] = useState<Record<string, CurrencyValidationError>>({});
   const [filters, setFilters] = useState<Filters>(initialFilters);
+  const [invOpFilter, setInvOpFilter] = useState<string>('');
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const exportContainerRef = useRef<HTMLDivElement>(null);
   const [categorizingId, setCategorizingId] = useState<string | null>(null);
@@ -102,13 +108,14 @@ export default function App() {
   const handleFileSelect = (selectedFile: File) => {
     setFile(selectedFile);
     setTransactions([]);
+    setInvestmentTransactions([]);
+    setInvestmentMeta(null);
     setError(null);
     setDateErrors({});
     setCnpjErrors({});
     setCurrencyErrors({});
     setPageCount(null);
 
-    // Inicia a contagem de páginas em paralelo com o processamento
     countPdfPages(selectedFile)
       .then(count => setPageCount(count))
       .catch(err => console.error("Não foi possível contar as páginas:", err));
@@ -125,73 +132,95 @@ export default function App() {
     setCurrencyErrors({});
 
     try {
-      setLoadingMessage('Enviando para análise da IA. Isso pode levar alguns instantes...');
-      const { transactions: extractedTransactions, finalBalance, accountHolderCNPJ } = await processBankStatementPDF(pdfFile);
+      if (documentType === 'investment') {
+        // ─── Extrato de Cotista ────────────────────────────────────────
+        setLoadingMessage('Analisando Extrato de Cotista. Isso pode levar alguns instantes...');
+        const result = await processInvestmentStatementPDF(pdfFile);
+        setLoadingMessage('Análise concluída. Organizando movimentações...');
 
-      setLoadingMessage('Análise concluída. Finalizando e validando dados...');
+        const withId: InvestmentTransaction[] = result.investmentTransactions.map(t => ({
+          ...t,
+          id: crypto.randomUUID(),
+        }));
+        setInvestmentTransactions(withId);
+        setInvestmentMeta({
+          cotistaNome: result.cotistaNome,
+          cotistaCNPJ: result.cotistaCNPJ,
+          bankName: result.bankName,
+          periodStart: result.periodStart,
+          periodEnd: result.periodEnd,
+        });
 
-      // CNPJ Validation against File
-      if (accountHolderCNPJ && companyInfo) {
-        const fileCNPJ = accountHolderCNPJ.replace(/\D/g, '');
-        const formCNPJ = companyInfo.cnpj.replace(/\D/g, '');
-
-        if (fileCNPJ && formCNPJ && fileCNPJ !== formCNPJ) {
-          setToastMessage(`ERRO: CNPJ do arquivo (${formatCNPJForDisplay(fileCNPJ)}) diverge do informado (${formatCNPJForDisplay(formCNPJ)}).`);
-          setToastType('error');
+        const unusualCount = withId.filter(t => t.isUnusual).length;
+        if (unusualCount > 0) {
+          setToastMessage(`${unusualCount} movimentação(ões) com anomalia detectada(s).`);
+          setToastType('warning');
           setShowToast(true);
         }
-      }
+      } else {
+        // ─── Extrato Bancário ──────────────────────────────────────────
+        setLoadingMessage('Enviando para análise da IA. Isso pode levar alguns instantes...');
+        const { transactions: extractedTransactions, finalBalance, accountHolderCNPJ } = await processBankStatementPDF(pdfFile);
 
-      const transactionsWithFormattedCurrency = extractedTransactions.map(t => {
-        const debitValue = Math.abs(t.debit || 0);
-        const creditValue = Math.abs(t.credit || 0);
-        return {
-          ...t,
-          debit: debitValue > 0 ? debitValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "",
-          credit: creditValue > 0 ? creditValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "",
-          category: t.category || 'Não categorizado',
-          isUnusual: t.isUnusual || false,
-          unusualReason: t.unusualReason || '',
-        };
-      });
+        setLoadingMessage('Análise concluída. Finalizando e validando dados...');
 
-      const { transactionsWithBalances } = calculateBalances(transactionsWithFormattedCurrency);
-      setTransactions(transactionsWithBalances);
-      setStatementBalance(finalBalance ?? null);
-
-      // Validação inicial
-      const initialDateErrors: Record<string, DateValidationError> = {};
-      const initialCnpjErrors: Record<string, CNPJValidationError> = {};
-      const dateValidationPromises = [];
-
-      for (const t of transactionsWithBalances) {
-        // Date validation
-        const dateValidationResult = validateDate(t.date);
-        if (!dateValidationResult.isValid) {
-          const promise = suggestDateCorrection(t.date).then(suggestion => ({
-            id: t.id,
-            error: {
-              message: dateValidationResult.message!,
-              suggestion: suggestion !== t.date && validateDate(suggestion).isValid ? suggestion : undefined,
-            }
-          }));
-          dateValidationPromises.push(promise);
+        if (accountHolderCNPJ && companyInfo) {
+          const fileCNPJ = accountHolderCNPJ.replace(/\D/g, '');
+          const formCNPJ = companyInfo.cnpj.replace(/\D/g, '');
+          if (fileCNPJ && formCNPJ && fileCNPJ !== formCNPJ) {
+            setToastMessage(`ERRO: CNPJ do arquivo (${formatCNPJForDisplay(fileCNPJ)}) diverge do informado (${formatCNPJForDisplay(formCNPJ)}).`);
+            setToastType('error');
+            setShowToast(true);
+          }
         }
-        // CNPJ validation
-        const cnpjValidationResult = validateCNPJ(t.cnpj);
-        if (!cnpjValidationResult.isValid) {
-          initialCnpjErrors[t.id] = { message: cnpjValidationResult.message! };
+
+        const transactionsWithFormattedCurrency = extractedTransactions.map(t => {
+          const debitValue = Math.abs(t.debit || 0);
+          const creditValue = Math.abs(t.credit || 0);
+          return {
+            ...t,
+            debit: debitValue > 0 ? debitValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "",
+            credit: creditValue > 0 ? creditValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "",
+            category: t.category || 'Não categorizado',
+            isUnusual: t.isUnusual || false,
+            unusualReason: t.unusualReason || '',
+          };
+        });
+
+        const { transactionsWithBalances } = calculateBalances(transactionsWithFormattedCurrency);
+        setTransactions(transactionsWithBalances);
+        setStatementBalance(finalBalance ?? null);
+
+        const initialDateErrors: Record<string, DateValidationError> = {};
+        const initialCnpjErrors: Record<string, CNPJValidationError> = {};
+        const dateValidationPromises = [];
+
+        for (const t of transactionsWithBalances) {
+          const dateValidationResult = validateDate(t.date);
+          if (!dateValidationResult.isValid) {
+            const promise = suggestDateCorrection(t.date).then(suggestion => ({
+              id: t.id,
+              error: {
+                message: dateValidationResult.message!,
+                suggestion: suggestion !== t.date && validateDate(suggestion).isValid ? suggestion : undefined,
+              }
+            }));
+            dateValidationPromises.push(promise);
+          }
+          const cnpjValidationResult = validateCNPJ(t.cnpj);
+          if (!cnpjValidationResult.isValid) {
+            initialCnpjErrors[t.id] = { message: cnpjValidationResult.message! };
+          }
         }
+
+        const dateValidationResults = (await Promise.all(dateValidationPromises));
+        dateValidationResults.forEach(result => {
+          if (result) initialDateErrors[result.id] = result.error;
+        });
+
+        setDateErrors(initialDateErrors);
+        setCnpjErrors(initialCnpjErrors);
       }
-
-      const dateValidationResults = (await Promise.all(dateValidationPromises));
-      dateValidationResults.forEach(result => {
-        if (result) initialDateErrors[result.id] = result.error;
-      });
-
-      setDateErrors(initialDateErrors);
-      setCnpjErrors(initialCnpjErrors);
-
     } catch (err: unknown) {
       console.error(err);
       if (err instanceof Error) {
@@ -360,6 +389,8 @@ export default function App() {
     setFile(null);
     setPageCount(null);
     setTransactions([]);
+    setInvestmentTransactions([]);
+    setInvestmentMeta(null);
     setError(null);
     setIsLoading(false);
     setStatementBalance(null);
@@ -369,6 +400,7 @@ export default function App() {
     setIsInfoConfirmed(false);
     setCompanyInfo(null);
     setFilters(initialFilters);
+    setInvOpFilter('');
     setExportMenuOpen(false);
   };
 
@@ -455,6 +487,39 @@ export default function App() {
             </div>
           )}
 
+          {/* Seletor de tipo de extrato */}
+          {isInfoConfirmed && !file && !isLoading && (
+            <div className="mb-6 p-4 bg-white dark:bg-slate-800 shadow-md rounded-lg animate-fade-in">
+              <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-3">
+                Selecione o tipo de documento que será processado:
+              </h3>
+              <div className="flex gap-3 flex-wrap">
+                <button
+                  onClick={() => setDocumentType('bank')}
+                  className={`flex-1 min-w-[200px] flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all ${documentType === 'bank'
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                      : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400'
+                    }`}
+                >
+                  <span className="text-2xl">🏦</span>
+                  <span className="font-semibold text-sm">Extrato Bancário</span>
+                  <span className="text-xs text-center opacity-75">Débito, crédito e saldo de conta corrente</span>
+                </button>
+                <button
+                  onClick={() => setDocumentType('investment')}
+                  className={`flex-1 min-w-[200px] flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all ${documentType === 'investment'
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                      : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400'
+                    }`}
+                >
+                  <span className="text-2xl">📈</span>
+                  <span className="font-semibold text-sm">Extrato de Cotista (XP)</span>
+                  <span className="text-xs text-center opacity-75">Aplicações, resgates, come-cotas e rendimentos em fundos</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {isInfoConfirmed && !file && !isLoading && (
             <FileUpload onFileSelect={handleFileSelect} />
           )}
@@ -476,11 +541,12 @@ export default function App() {
             </div>
           )}
 
-          {!isLoading && transactions.length > 0 && (
+          {/* ─── Extrato Bancário ──────────────────────────────────── */}
+          {!isLoading && documentType === 'bank' && transactions.length > 0 && (
             <Dashboard transactions={filteredTransactions} />
           )}
 
-          {!isLoading && transactions.length > 0 && (
+          {!isLoading && documentType === 'bank' && transactions.length > 0 && (
             <div className="bg-white dark:bg-slate-800 shadow-xl rounded-xl overflow-hidden animate-fade-in">
               <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row justify-between items-center gap-4">
                 <div>
@@ -583,6 +649,92 @@ export default function App() {
               />
             </div>
           )}
+
+          {/* ─── Extrato de Cotista XP ─────────────────────────────── */}
+          {!isLoading && documentType === 'investment' && investmentTransactions.length > 0 && (() => {
+            const filtered = invOpFilter
+              ? investmentTransactions.filter(t => t.operationType === invOpFilter)
+              : investmentTransactions;
+
+            const totalBruto = filtered.reduce((s, t) => s + t.grossValue, 0);
+            const totalIR = filtered.reduce((s, t) => s + t.irWithheld, 0);
+            const totalLiquido = filtered.reduce((s, t) => s + t.netValue, 0);
+            const fmtCur = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            const fmtDate = (d?: string) => { if (!d) return ''; const [y, m, day] = d.split('-'); return `${day}/${m}/${y}`; };
+
+            return (
+              <div className="bg-white dark:bg-slate-800 shadow-xl rounded-xl overflow-hidden animate-fade-in">
+                {/* Cabeçalho */}
+                <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-slate-700">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-xl font-bold text-slate-900 dark:text-white">📈 Extrato de Cotista</h2>
+                        <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">
+                          XP Investimentos
+                        </span>
+                      </div>
+                      {investmentMeta && (
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                          {investmentMeta.cotistaNome && <span className="mr-2">Cotista: <strong>{investmentMeta.cotistaNome}</strong></span>}
+                          {investmentMeta.cotistaCNPJ && <span className="mr-2">CNPJ: <strong>{formatCNPJForDisplay(investmentMeta.cotistaCNPJ)}</strong></span>}
+                          {investmentMeta.periodStart && investmentMeta.periodEnd && (
+                            <span>Período: <strong>{fmtDate(investmentMeta.periodStart)} a {fmtDate(investmentMeta.periodEnd)}</strong></span>
+                          )}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={handleReset}
+                      className="inline-flex items-center justify-center px-4 py-2 border border-slate-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                      <ArrowPathIcon className="h-5 w-5 mr-2" />
+                      Processar Novo Arquivo
+                    </button>
+                  </div>
+
+                  {/* Cards de resumo */}
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-3 text-center">
+                      <div className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Valor Bruto Total</div>
+                      <div className="text-lg font-bold text-slate-800 dark:text-white">{fmtCur(totalBruto)}</div>
+                    </div>
+                    <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3 text-center">
+                      <div className="text-xs text-red-500 dark:text-red-400 uppercase tracking-wide mb-1">IR Total Retido</div>
+                      <div className="text-lg font-bold text-red-700 dark:text-red-300">{fmtCur(totalIR)}</div>
+                    </div>
+                    <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-lg p-3 text-center">
+                      <div className="text-xs text-emerald-600 dark:text-emerald-400 uppercase tracking-wide mb-1">Valor Líquido Total</div>
+                      <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">{fmtCur(totalLiquido)}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filtro por tipo de operação */}
+                <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Filtrar por operação:</span>
+                  {['', ...INVESTMENT_OPERATION_TYPES].map(op => (
+                    <button
+                      key={op || 'all'}
+                      onClick={() => setInvOpFilter(op)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${invOpFilter === op
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                        }`}
+                    >
+                      {op || 'Todas'}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="px-4 py-2 text-sm text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+                  Exibindo {filtered.length} de {investmentTransactions.length} movimentações.
+                </div>
+
+                <InvestmentTable transactions={filtered} />
+              </div>
+            );
+          })()}
         </div>
       </main>
 

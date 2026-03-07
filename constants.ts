@@ -1,3 +1,13 @@
+export const INVESTMENT_OPERATION_TYPES = [
+  'Aplicação',
+  'Resgate',
+  'Rendimento',
+  'Come-cotas',
+  'Amortização',
+  'Transferência',
+  'Outro',
+] as const;
+
 export const TRANSACTION_CATEGORIES = [
   "Não categorizado",
   "Receita de Vendas",
