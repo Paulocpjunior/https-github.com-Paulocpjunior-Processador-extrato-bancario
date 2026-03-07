@@ -54,12 +54,17 @@ export interface InvestmentTransaction {
 }
 
 export interface GeminiInvestmentResponse {
-    investmentTransactions: Omit<InvestmentTransaction, 'id'>[];
+    investmentTransactions: InvestmentTransaction[];
     cotistaNome?: string;      // Nome do cotista
     cotistaCNPJ?: string;      // CNPJ do cotista (só números)
     bankName?: string;         // Corretora/banco
     periodStart?: string;      // Início do período (AAAA-MM-DD)
     periodEnd?: string;        // Fim do período (AAAA-MM-DD)
+    // Campos de verificação de completude
+    totalPagesInDocument?: number;
+    pagesProcessed?: number;
+    isExtractionComplete?: boolean;
+    extractionNotes?: string;
 }
 
 // ──────────────────────────────────────────────────────────────────────────

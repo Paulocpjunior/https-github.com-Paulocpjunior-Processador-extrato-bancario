@@ -50,7 +50,17 @@ export default function App() {
   const [pageCount, setPageCount] = useState<number | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [investmentTransactions, setInvestmentTransactions] = useState<InvestmentTransaction[]>([]);
-  const [investmentMeta, setInvestmentMeta] = useState<{ cotistaNome?: string; cotistaCNPJ?: string; bankName?: string; periodStart?: string; periodEnd?: string } | null>(null);
+  const [investmentMeta, setInvestmentMeta] = useState<{
+    cotistaNome?: string;
+    cotistaCNPJ?: string;
+    bankName?: string;
+    periodStart?: string;
+    periodEnd?: string;
+    totalPagesInDocument?: number;
+    pagesProcessed?: number;
+    isExtractionComplete?: boolean;
+    extractionNotes?: string;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -149,7 +159,17 @@ export default function App() {
           bankName: result.bankName,
           periodStart: result.periodStart,
           periodEnd: result.periodEnd,
+          totalPagesInDocument: result.totalPagesInDocument,
+          pagesProcessed: result.pagesProcessed,
+          isExtractionComplete: result.isExtractionComplete,
+          extractionNotes: result.extractionNotes,
         });
+
+        if (!result.isExtractionComplete) {
+          setToastMessage(`AVISO: A extração pode estar incompleta. ${result.extractionNotes || 'Verifique todas as páginas.'}`);
+          setToastType('warning');
+          setShowToast(true);
+        }
 
         const unusualCount = withId.filter(t => t.isUnusual).length;
         if (unusualCount > 0) {
@@ -497,8 +517,8 @@ export default function App() {
                 <button
                   onClick={() => setDocumentType('bank')}
                   className={`flex-1 min-w-[200px] flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all ${documentType === 'bank'
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                      : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400'
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400'
                     }`}
                 >
                   <span className="text-2xl">🏦</span>
@@ -508,8 +528,8 @@ export default function App() {
                 <button
                   onClick={() => setDocumentType('investment')}
                   className={`flex-1 min-w-[200px] flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all ${documentType === 'investment'
-                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
-                      : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400'
+                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400'
                     }`}
                 >
                   <span className="text-2xl">📈</span>
@@ -675,13 +695,29 @@ export default function App() {
                         </span>
                       </div>
                       {investmentMeta && (
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                          {investmentMeta.cotistaNome && <span className="mr-2">Cotista: <strong>{investmentMeta.cotistaNome}</strong></span>}
-                          {investmentMeta.cotistaCNPJ && <span className="mr-2">CNPJ: <strong>{formatCNPJForDisplay(investmentMeta.cotistaCNPJ)}</strong></span>}
-                          {investmentMeta.periodStart && investmentMeta.periodEnd && (
-                            <span>Período: <strong>{fmtDate(investmentMeta.periodStart)} a {fmtDate(investmentMeta.periodEnd)}</strong></span>
-                          )}
-                        </p>
+                        <div className="mt-1 flex flex-col gap-1">
+                          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                            {investmentMeta.cotistaNome && <span className="mr-2">Cotista: <strong>{investmentMeta.cotistaNome}</strong></span>}
+                            {investmentMeta.cotistaCNPJ && <span className="mr-2">CNPJ: <strong>{formatCNPJForDisplay(investmentMeta.cotistaCNPJ)}</strong></span>}
+                            {investmentMeta.periodStart && investmentMeta.periodEnd && (
+                              <span>Período: <strong>{fmtDate(investmentMeta.periodStart)} a {fmtDate(investmentMeta.periodEnd)}</strong></span>
+                            )}
+                          </p>
+                          <div className="flex items-center gap-3 text-xs">
+                            <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full ${investmentMeta.isExtractionComplete
+                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 font-bold'
+                              }`}>
+                              {investmentMeta.isExtractionComplete ? <CheckCircleIcon className="h-3.5 w-3.5" /> : <ExclamationTriangleIcon className="h-3.5 w-3.5" />}
+                              {investmentMeta.isExtractionComplete ? 'Extração Completa' : 'Extração Incompleta / Revisão Necessária'}
+                            </div>
+                            {investmentMeta.totalPagesInDocument ? (
+                              <span className="text-slate-500 dark:text-slate-400">
+                                Páginas processadas: <strong>{investmentMeta.pagesProcessed || investmentMeta.totalPagesInDocument} de {investmentMeta.totalPagesInDocument}</strong>
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
                       )}
                     </div>
                     <button
@@ -718,8 +754,8 @@ export default function App() {
                       key={op || 'all'}
                       onClick={() => setInvOpFilter(op)}
                       className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${invOpFilter === op
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
                         }`}
                     >
                       {op || 'Todas'}

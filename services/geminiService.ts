@@ -435,6 +435,22 @@ const investmentResponseSchema = {
             type: Type.STRING,
             description: 'Data de fim do período do extrato no formato AAAA-MM-DD. Omitir se não encontrado.'
         },
+        totalPagesInDocument: {
+            type: Type.NUMBER,
+            description: 'Número total de páginas identificadas no documento.'
+        },
+        pagesProcessed: {
+            type: Type.NUMBER,
+            description: 'Número de páginas efetivamente processadas pela IA.'
+        },
+        isExtractionComplete: {
+            type: Type.BOOLEAN,
+            description: 'true se todas as movimentações de todas as páginas foram extraídas.'
+        },
+        extractionNotes: {
+            type: Type.STRING,
+            description: 'Notas sobre a extração (ex: páginas faltantes).'
+        },
     },
     required: ['investmentTransactions']
 };
@@ -475,6 +491,11 @@ INSTRUÇÕES DE EXTRAÇÃO:
    - Valor muito discrepante dos demais
    - Come-cotas com valor zerado (suspeito)
    - Data fora do período do extrato
+
+6. **NÃO OMITA NADA**: Você deve ler TODAS as páginas do PDF do início ao fim. Se houver 10 páginas, extraia todas as transações das 10 páginas.
+7. **Verificação de Páginas**: Procure por indicadores de página (ex: "Página 1 de 5"). Reporte o total de páginas no campo "totalPagesInDocument" e marque "isExtractionComplete" como true apenas se tiver certeza de que processou do início ao fim.
+8. **Dados do Cotista e Período**: Extraia o nome e CNPJ do cotista e o período início/fim do extrato (geralmente no cabeçalho).
+9. **Anomalias**: Se uma linha estiver truncada ou ilegível, marque "isUnusual: true" e descreva o motivo.
 
 ATENÇÃO: Extraia TODAS as linhas de movimentação. Não pule nenhuma. Valores numéricos sempre positivos.`;
 
