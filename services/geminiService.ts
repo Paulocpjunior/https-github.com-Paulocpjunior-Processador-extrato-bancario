@@ -4,10 +4,24 @@ import { fileToBase64 } from "../utils/fileUtils";
 import { GeminiTransactionResponse, GeminiInvestmentResponse } from "../types";
 import { TRANSACTION_CATEGORIES } from '../constants';
 
-const processEnvKey = typeof process !== 'undefined' ? process.env?.GEMINI_API_KEY : undefined;
-const windowEnvKey = typeof window !== 'undefined' ? (window as any).ENV?.GEMINI_API_KEY : undefined;
+// Fallback para ambientes sem tipos de Node injetados
+declare const process: any;
 
-const API_KEY = windowEnvKey !== "__GEMINI_API_KEY__" ? windowEnvKey : processEnvKey;
+const getApiKey = () => {
+    const windowEnvKey = typeof window !== 'undefined' ? (window as any).ENV?.GEMINI_API_KEY : undefined;
+    if (windowEnvKey && windowEnvKey !== "__GEMINI_API_KEY__") return windowEnvKey;
+
+    try {
+        if (typeof process !== 'undefined' && process.env) {
+            return process.env.GEMINI_API_KEY;
+        }
+    } catch (e) {
+        // Ignora erros de acesso ao process
+    }
+    return undefined;
+};
+
+const API_KEY = getApiKey();
 
 if (!API_KEY || API_KEY === "__GEMINI_API_KEY__") {
     throw new Error("A variável de ambiente GEMINI_API_KEY não está definida.");
