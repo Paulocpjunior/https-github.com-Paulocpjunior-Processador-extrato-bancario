@@ -44,7 +44,7 @@ const repairTruncatedJson = (text: string): string => {
     let cleaned = text.trim();
 
     if (cleaned.startsWith('```')) {
-        cleaned = cleaned.replace(/^```json\n?/, '').replace(/```$/, '').trim();
+        cleaned = cleaned.replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/```$/, '').trim();
     }
 
     try {
@@ -54,59 +54,29 @@ const repairTruncatedJson = (text: string): string => {
         // Needs repair
     }
 
-    const txArrayMatch = cleaned.indexOf('"transactions"');
-    if (txArrayMatch === -1) {
-        return `{"transactions":[]}`;
-    }
+    const keyIndex = cleaned.indexOf('"transactions"');
+    if (keyIndex === -1) return '{"transactions":[]}';
 
-    const arrayStart = cleaned.indexOf('[', txArrayMatch);
-    if (arrayStart === -1) {
-        return `{"transactions":[]}`;
-    }
+    const arrayStart = cleaned.indexOf('[', keyIndex);
+    if (arrayStart === -1) return '{"transactions":[]}';
 
-    let depth = 0;
-    let lastCompleteObjectEnd = -1;
-    let inString = false;
-    let escapeNext = false;
-
+    // Robust: scan all closing braces and try each one as cut point
+    const closingBraces: number[] = [];
     for (let i = arrayStart + 1; i < cleaned.length; i++) {
-        const char = cleaned[i];
-
-        if (escapeNext) { escapeNext = false; continue; }
-        if (char === '\\') { escapeNext = true; continue; }
-        if (char === '"') { inString = !inString; continue; }
-        if (inString) continue;
-
-        if (char === '{') {
-            depth++;
-        } else if (char === '}') {
-            depth--;
-            if (depth === 0) {
-                lastCompleteObjectEnd = i;
-            }
-        }
+        if (cleaned[i] === '}') closingBraces.push(i);
     }
 
-    if (lastCompleteObjectEnd === -1) {
-        return `{"transactions":[]}`;
-    }
-
-    let repaired = cleaned.substring(0, lastCompleteObjectEnd + 1);
-    repaired += ']}';
-
-    try {
-        JSON.parse(repaired);
-        return repaired;
-    } catch {
+    for (let i = closingBraces.length - 1; i >= 0; i--) {
+        const cutPoint = closingBraces[i];
+        const candidate = cleaned.substring(arrayStart, cutPoint + 1) + ']';
+        const wrapped = `{"transactions":${candidate}}`;
         try {
-            const arrayContent = cleaned.substring(arrayStart, lastCompleteObjectEnd + 1) + ']';
-            const fallback = `{"transactions":${arrayContent}}`;
-            JSON.parse(fallback);
-            return fallback;
-        } catch {
-            return `{"transactions":[]}`;
-        }
+            JSON.parse(wrapped);
+            return wrapped;
+        } catch { /* try previous */ }
     }
+
+    return '{"transactions":[]}';
 };
 
 const responseSchema = {
@@ -407,30 +377,30 @@ export const processInvestmentStatementPDF = async (file: File, maxRetries = 2):
 const repairTruncatedJsonInvestment = (text: string): string => {
     let cleaned = text.trim();
     if (cleaned.startsWith('```')) {
-        cleaned = cleaned.replace(/^```json\n?/, '').replace(/```$/, '').trim();
+        cleaned = cleaned.replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/```$/, '').trim();
     }
     try { JSON.parse(cleaned); return cleaned; } catch { /* needs repair */ }
 
-    const txArrayMatch = cleaned.indexOf('"investmentTransactions"');
-    if (txArrayMatch === -1) return '{"investmentTransactions":[], "isExtractionComplete": false, "extractionNotes": "Erro: Campo investmentTransactions não encontrado."}';
+    const keyIndex = cleaned.indexOf('"investmentTransactions"');
+    if (keyIndex === -1) return '{"investmentTransactions":[],"isExtractionComplete":false,"extractionNotes":"Erro: campo não encontrado."}';
 
-    const arrayStart = cleaned.indexOf('[', txArrayMatch);
-    if (arrayStart === -1) return '{"investmentTransactions":[], "isExtractionComplete": false, "extractionNotes": "Erro: Início de array não encontrado."}';
+    const arrayStart = cleaned.indexOf('[', keyIndex);
+    if (arrayStart === -1) return '{"investmentTransactions":[],"isExtractionComplete":false,"extractionNotes":"Erro: array não encontrado."}';
 
-    let depth = 0, lastCompleteObjectEnd = -1, inString = false, escapeNext = false;
+    const closingBraces: number[] = [];
     for (let i = arrayStart + 1; i < cleaned.length; i++) {
-        const char = cleaned[i];
-        if (escapeNext) { escapeNext = false; continue; }
-        if (char === '\\') { escapeNext = true; continue; }
-        if (char === '"') { inString = !inString; continue; }
-        if (inString) continue;
-        if (char === '{') depth++;
-        else if (char === '}') { depth--; if (depth === 0) lastCompleteObjectEnd = i; }
+        if (cleaned[i] === '}') closingBraces.push(i);
     }
 
-    if (lastCompleteObjectEnd !== -1) {
-        return cleaned.substring(0, lastCompleteObjectEnd + 1) + '], "isExtractionComplete": false, "extractionNotes": "Resposta truncada pela IA. Dados parciais recuperados."}';
+    for (let i = closingBraces.length - 1; i >= 0; i--) {
+        const cutPoint = closingBraces[i];
+        const candidate = cleaned.substring(arrayStart, cutPoint + 1) + ']';
+        const wrapped = `{"investmentTransactions":${candidate},"isExtractionComplete":false,"extractionNotes":"Resposta truncada. Dados parciais recuperados."}`;
+        try {
+            JSON.parse(wrapped);
+            return wrapped;
+        } catch { /* try previous */ }
     }
 
-    return '{"investmentTransactions":[], "isExtractionComplete": false, "extractionNotes": "Erro crítico no formato da resposta truncada."}';
+    return '{"investmentTransactions":[],"isExtractionComplete":false,"extractionNotes":"Erro crítico na resposta truncada."}';
 };
